@@ -1,4 +1,3 @@
-
 import { NextResponse } from "next/server";
 import connectDB from "../../../lib/mongodb.js";
 import Listing from "../../../models/Listing.js";
