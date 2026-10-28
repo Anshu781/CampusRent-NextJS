@@ -1,7 +1,7 @@
 
 import { NextResponse } from "next/server";
-import connectDB from "../../../../lib/mongodb.js";
-import Listing from "../../../../models/Listing.js";
+import connectDB from "../../../lib/mongodb.js";
+import Listing from "../../../models/Listing.js";
 import mongoose from "mongoose";
 
 export async function POST(request) {
