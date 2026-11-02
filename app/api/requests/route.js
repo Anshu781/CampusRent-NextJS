@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import jwt from "jsonwebtoken";
 
 import connectDB from "../../../lib/mongodb";
 import Request from "../../../models/Request";
@@ -9,6 +10,8 @@ import Request from "../../../models/Request";
 export const runtime = "nodejs";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
+const JWT_SECRET = process.env.JWT_SECRET || "campusrent_jwt_secret";
+const DEFAULT_ADMIN_SECRET = process.env.ADMIN_SECRET || "campusadmin123";
 
 const allowedTypes = {
   "image/jpeg": ".jpg",
@@ -16,8 +19,32 @@ const allowedTypes = {
   "image/webp": ".webp",
 };
 
-// GET: Fetch all buyer and rental requests for the admin page
+// Helper to verify admin authorization for sensitive endpoints
+function verifyAdmin(request) {
+  const token =
+    request.headers.get("x-admin-token") ||
+    request.headers.get("authorization")?.replace("Bearer ", "");
+
+  if (!token) return false;
+  if (token === DEFAULT_ADMIN_SECRET) return true;
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    return decoded && decoded.role === "admin";
+  } catch {
+    return false;
+  }
+}
+
+// GET: Fetch all buyer and rental requests (Admin only)
 export async function GET(request) {
+  if (!verifyAdmin(request)) {
+    return NextResponse.json(
+      { message: "Access Denied: Admin authentication required." },
+      { status: 401 }
+    );
+  }
+
   try {
     await connectDB();
     const { searchParams } = new URL(request.url);
@@ -40,7 +67,7 @@ export async function GET(request) {
   }
 }
 
-// POST: Submit a new rental or buy request (mandatorily with phone number)
+// POST: Submit a new rental or buy request (Public for students)
 export async function POST(request) {
   let savedPhotoPath = null;
 
@@ -157,6 +184,13 @@ export async function POST(request) {
 
 // PATCH: Admin updates request status (verify, contact, reject, etc.)
 export async function PATCH(request) {
+  if (!verifyAdmin(request)) {
+    return NextResponse.json(
+      { message: "Access Denied: Admin authentication required." },
+      { status: 401 }
+    );
+  }
+
   try {
     const body = await request.json();
     const { id, status, adminNotes } = body;
@@ -186,6 +220,13 @@ export async function PATCH(request) {
 
 // DELETE: Admin removes a request
 export async function DELETE(request) {
+  if (!verifyAdmin(request)) {
+    return NextResponse.json(
+      { message: "Access Denied: Admin authentication required." },
+      { status: 401 }
+    );
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");

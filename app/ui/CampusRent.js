@@ -357,29 +357,9 @@ async function submitRequest(e) {
           <a href="#explore" onClick={() => setMenuOpen(false)}>Explore rentals</a>
           <a href="#how-it-works" onClick={() => setMenuOpen(false)}>How it works</a>
           <a href="#community" onClick={() => setMenuOpen(false)}>Our community</a>
-          <Link href="/admin" onClick={() => setMenuOpen(false)} style={{ color: "#243d26", fontWeight: 700 }}>
-            🛡️ Admin Desk
-          </Link>
         </nav>
 
         <div className="header-actions">
-          <Link
-            href="/admin"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              background: "#c8f169",
-              color: "#17251f",
-              padding: "7px 13px",
-              borderRadius: 20,
-              fontSize: 12,
-              fontWeight: 800,
-              textDecoration: "none",
-            }}
-          >
-            🛡️ Admin Desk
-          </Link>
           <button className="saved-link" onClick={() =>
             showNotice(saved.length
               ? `${saved.length} item(s) saved for later.`

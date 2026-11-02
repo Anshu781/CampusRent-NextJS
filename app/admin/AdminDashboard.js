@@ -5,15 +5,27 @@ import Link from "next/link";
 import {
   PackageCheck, ArrowLeft, Phone, MessageSquare, CheckCircle,
   XCircle, Clock, Trash2, Plus, RefreshCw, Eye, AlertCircle,
-  Filter, Search, MapPin, ShieldCheck, Tag, ShoppingCart, KeyRound
+  Filter, Search, MapPin, ShieldCheck, Tag, ShoppingCart, Lock,
+  LogOut, KeyRound, UserCheck
 } from "lucide-react";
 
 export default function AdminDashboard() {
+  // Admin authentication state
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+  const [adminToken, setAdminToken] = useState("");
+  const [loginForm, setLoginForm] = useState({
+    email: "admin@campusrent.com",
+    password: "",
+  });
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState("");
+
+  // Dashboard state
   const [activeTab, setActiveTab] = useState("requests"); // "requests" | "inventory"
   const [requests, setRequests] = useState([]);
   const [listings, setListings] = useState([]);
   const [dbCounts, setDbCounts] = useState({});
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [notice, setNotice] = useState("");
 
@@ -42,7 +54,6 @@ export default function AdminDashboard() {
     photo: "",
   });
 
-  // Modal to convert verified request into listing
   const [convertModalRequest, setConvertModalRequest] = useState(null);
 
   function showToast(msg) {
@@ -50,17 +61,84 @@ export default function AdminDashboard() {
     setTimeout(() => setNotice(""), 4500);
   }
 
-  // Fetch both requests and listings from DB
-  async function loadData() {
+  // Check existing admin session in sessionStorage on mount
+  useEffect(() => {
+    const savedToken = sessionStorage.getItem("campusrent_admin_token");
+    if (savedToken) {
+      setAdminToken(savedToken);
+      setIsAdminAuthenticated(true);
+    }
+  }, []);
+
+  // When admin is authenticated, load requests and inventory
+  useEffect(() => {
+    if (isAdminAuthenticated && adminToken) {
+      loadData(adminToken);
+    }
+  }, [isAdminAuthenticated, adminToken]);
+
+  // Handle Admin Login submission
+  async function handleAdminLogin(e) {
+    e.preventDefault();
+    setLoginLoading(true);
+    setLoginError("");
+
+    try {
+      const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(loginForm),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Invalid admin credentials.");
+      }
+
+      sessionStorage.setItem("campusrent_admin_token", data.token);
+      setAdminToken(data.token);
+      setIsAdminAuthenticated(true);
+      showToast("Welcome to CampusRent Admin Console!");
+    } catch (err) {
+      setLoginError(err.message);
+    } finally {
+      setLoginLoading(false);
+    }
+  }
+
+  // Handle Admin Logout
+  function handleAdminLogout() {
+    sessionStorage.removeItem("campusrent_admin_token");
+    setAdminToken("");
+    setIsAdminAuthenticated(false);
+    setRequests([]);
+    setListings([]);
+    showToast("Logged out of Admin Console.");
+  }
+
+  // Fetch both requests and listings from DB with admin authorization header
+  async function loadData(token = adminToken) {
     setLoading(true);
     try {
       const [reqRes, listRes] = await Promise.all([
-        fetch("/api/requests"),
+        fetch("/api/requests", {
+          headers: {
+            "x-admin-token": token,
+            Authorization: `Bearer ${token}`,
+          },
+        }),
         fetch("/api/listings"),
       ]);
 
       const reqData = await reqRes.json();
       const listData = await listRes.json();
+
+      if (reqRes.status === 401) {
+        handleAdminLogout();
+        setLoginError("Your admin session expired. Please log in again.");
+        return;
+      }
 
       if (reqRes.ok) setRequests(reqData.requests || []);
       if (listRes.ok) {
@@ -75,17 +153,17 @@ export default function AdminDashboard() {
     }
   }
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
   // Update request status (pending, contacted, verified, rejected)
   async function handleUpdateStatus(id, newStatus) {
     setActionLoading(true);
     try {
       const res = await fetch("/api/requests", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-token": adminToken,
+          Authorization: `Bearer ${adminToken}`,
+        },
         body: JSON.stringify({ id, status: newStatus }),
       });
       const data = await res.json();
@@ -107,7 +185,13 @@ export default function AdminDashboard() {
     if (!confirm("Are you sure you want to delete this request record?")) return;
     setActionLoading(true);
     try {
-      const res = await fetch(`/api/requests?id=${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/requests?id=${id}`, {
+        method: "DELETE",
+        headers: {
+          "x-admin-token": adminToken,
+          Authorization: `Bearer ${adminToken}`,
+        },
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to delete request");
 
@@ -125,13 +209,18 @@ export default function AdminDashboard() {
     if (!confirm(`Are you sure you want to remove "${name}" from database listings?`)) return;
     setActionLoading(true);
     try {
-      const res = await fetch(`/api/listings?id=${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/listings?id=${id}`, {
+        method: "DELETE",
+        headers: {
+          "x-admin-token": adminToken,
+          Authorization: `Bearer ${adminToken}`,
+        },
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to remove product");
 
       setListings((prev) => prev.filter((item) => item._id !== id));
       showToast(`"${name}" removed from database!`);
-      // refresh count
       loadData();
     } catch (err) {
       showToast(err.message);
@@ -151,7 +240,11 @@ export default function AdminDashboard() {
     try {
       const res = await fetch("/api/listings", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-token": adminToken,
+          Authorization: `Bearer ${adminToken}`,
+        },
         body: JSON.stringify({
           ...newProduct,
           price: Number(newProduct.price) || 0,
@@ -233,6 +326,173 @@ export default function AdminDashboard() {
     0
   );
 
+  // =========================================================================
+  // VIEW 1: LOCKED ADMIN LOGIN SCREEN (When not authenticated)
+  // =========================================================================
+  if (!isAdminAuthenticated) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#17251f",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 24,
+          fontFamily: "'DM Sans', sans-serif",
+          color: "#f5f6ef",
+        }}
+      >
+        <div style={{ maxWidth: 420, width: "100%" }}>
+          <div style={{ textAlign: "center", marginBottom: 28 }}>
+            <div
+              style={{
+                width: 54,
+                height: 54,
+                background: "#c8f169",
+                borderRadius: 14,
+                display: "grid",
+                placeItems: "center",
+                margin: "0 auto 16px",
+                color: "#17251f",
+              }}
+            >
+              <Lock size={26} strokeWidth={2.4} />
+            </div>
+            <h1 style={{ margin: "0 0 6px", fontSize: 24, fontWeight: 800 }}>
+              CampusRent Admin Portal
+            </h1>
+            <p style={{ margin: 0, color: "#9ca899", fontSize: 13 }}>
+              Authorized campus administrator credentials required to access customer requests and inventory controls.
+            </p>
+          </div>
+
+          <form
+            onSubmit={handleAdminLogin}
+            style={{
+              background: "#203028",
+              border: "1px solid #2d4237",
+              borderRadius: 12,
+              padding: "28px 24px",
+              boxShadow: "0 16px 36px rgba(0,0,0,0.35)",
+            }}
+          >
+            {loginError && (
+              <div
+                style={{
+                  background: "#451a1a",
+                  border: "1px solid #7f1d1d",
+                  color: "#fca5a5",
+                  padding: "10px 14px",
+                  borderRadius: 6,
+                  fontSize: 12,
+                  marginBottom: 18,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                <AlertCircle size={15} style={{ flexShrink: 0 }} />
+                <span>{loginError}</span>
+              </div>
+            )}
+
+            <label style={{ display: "block", marginBottom: 16 }}>
+              <span style={{ display: "block", fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: "#a5b4a2", marginBottom: 6 }}>
+                ADMIN EMAIL
+              </span>
+              <input
+                type="email"
+                required
+                value={loginForm.email}
+                onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+                placeholder="admin@campusrent.com"
+                style={{
+                  width: "100%",
+                  boxSizing: "border-box",
+                  background: "#17251f",
+                  border: "1px solid #334a3e",
+                  borderRadius: 6,
+                  padding: "10px 13px",
+                  color: "#f5f6ef",
+                  fontSize: 13,
+                  outline: "none",
+                }}
+              />
+            </label>
+
+            <label style={{ display: "block", marginBottom: 22 }}>
+              <span style={{ display: "block", fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: "#a5b4a2", marginBottom: 6 }}>
+                ADMIN PASSWORD / KEY
+              </span>
+              <input
+                type="password"
+                required
+                value={loginForm.password}
+                onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                placeholder="Enter admin password"
+                style={{
+                  width: "100%",
+                  boxSizing: "border-box",
+                  background: "#17251f",
+                  border: "1px solid #334a3e",
+                  borderRadius: 6,
+                  padding: "10px 13px",
+                  color: "#f5f6ef",
+                  fontSize: 13,
+                  outline: "none",
+                }}
+              />
+            </label>
+
+            <button
+              type="submit"
+              disabled={loginLoading}
+              style={{
+                width: "100%",
+                background: "#c8f169",
+                color: "#17251f",
+                border: 0,
+                borderRadius: 6,
+                padding: "12px",
+                fontSize: 13,
+                fontWeight: 800,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+              }}
+            >
+              <KeyRound size={16} />
+              {loginLoading ? "Verifying..." : "Unlock Admin Console"}
+            </button>
+          </form>
+
+          <div style={{ textAlign: "center", marginTop: 24 }}>
+            <Link
+              href="/"
+              style={{
+                fontSize: 12,
+                color: "#9ca899",
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <ArrowLeft size={14} /> Return to Campus Marketplace
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // VIEW 2: AUTHENTICATED ADMIN DASHBOARD
+  // =========================================================================
   return (
     <div style={{ minHeight: "100vh", background: "#f6f8f5", color: "#17251f" }}>
       {/* Header */}
@@ -291,8 +551,24 @@ export default function AdminDashboard() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span
+            style={{
+              fontSize: 12,
+              background: "#e2e8dc",
+              color: "#283b27",
+              padding: "5px 11px",
+              borderRadius: 20,
+              fontWeight: 700,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+            }}
+          >
+            <UserCheck size={14} /> Admin Verified
+          </span>
+
           <button
-            onClick={loadData}
+            onClick={() => loadData()}
             disabled={loading}
             style={{
               display: "flex",
@@ -310,20 +586,24 @@ export default function AdminDashboard() {
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} /> Refresh
           </button>
 
-          <span
+          <button
+            onClick={handleAdminLogout}
             style={{
-              fontSize: 11,
-              fontFamily: "monospace",
-              background: "#dcfce7",
-              color: "#166534",
-              border: "1px solid #bbf7d0",
-              padding: "5px 10px",
-              borderRadius: 20,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              background: "#fee2e2",
+              border: "1px solid #fecaca",
+              color: "#991b1b",
+              padding: "7px 13px",
+              borderRadius: 6,
+              fontSize: 12,
               fontWeight: 700,
+              cursor: "pointer",
             }}
           >
-            ● Admin Intervention Active
-          </span>
+            <LogOut size={14} /> Log Out
+          </button>
         </div>
       </header>
 
@@ -358,14 +638,13 @@ export default function AdminDashboard() {
                 fontFamily: "monospace",
               }}
             >
-              <ShieldCheck size={14} /> CAMPUS INTERMEDIARY WORKFLOW
+              <ShieldCheck size={14} /> SECURE CAMPUS INTERMEDIARY WORKFLOW
             </div>
             <h2 style={{ margin: "6px 0 4px", fontSize: 20, fontWeight: 800 }}>
-              Buyer & Seller Verification Desk
+              Buyer & Seller Verification Desk (Restricted)
             </h2>
             <p style={{ margin: 0, color: "#9ca899", fontSize: 13, maxWidth: 700, lineHeight: 1.5 }}>
-              Direct peer payment is disabled. All buyers and renters submit their contact phone numbers here.
-              Contact them directly to verify hostel details, inspect items, and approve them before publishing to active listings.
+              This portal is restricted to administrators. Contact students via phone to inspect products, verify room & hostel numbers, and approve or reject requests.
             </p>
           </div>
 
