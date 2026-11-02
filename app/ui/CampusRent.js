@@ -273,7 +273,16 @@ function requestItem(item, mode = "rent") {
         setCurrentUser(data.user);
         setAuthOpen(false);
         setAuthForm({ name: "", email: "", password: "" });
-        showNotice(`Welcome${data.user?.name ? `, ${data.user.name}` : ""}!`);
+
+        if (data.user?.role === "admin" && data.token) {
+          sessionStorage.setItem("campusrent_admin_token", data.token);
+          showNotice("Admin verified! Redirecting to Admin Portal...");
+          setTimeout(() => {
+            window.location.href = "/admin";
+          }, 600);
+        } else {
+          showNotice(`Welcome${data.user?.name ? `, ${data.user.name}` : ""}!`);
+        }
       }
     } catch (error) {
       showNotice(error.message || "Could not connect to the server.");
@@ -370,15 +379,37 @@ async function submitRequest(e) {
           </button>
 
           {currentUser ? (
-            <button
-              className="button button-dark button-small"
-              onClick={() => {
-                setCurrentUser(null);
-                showNotice("Logged out of this page.");
-              }}
-            >
-              {currentUser.name || "Account"} · Log out
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {currentUser.role === "admin" && (
+                <Link
+                  href="/admin"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    background: "#c8f169",
+                    color: "#17251f",
+                    padding: "7px 13px",
+                    borderRadius: 20,
+                    fontSize: 12,
+                    fontWeight: 800,
+                    textDecoration: "none",
+                  }}
+                >
+                  🛡️ Admin Portal
+                </Link>
+              )}
+              <button
+                className="button button-dark button-small"
+                onClick={() => {
+                  setCurrentUser(null);
+                  sessionStorage.removeItem("campusrent_admin_token");
+                  showNotice("Logged out.");
+                }}
+              >
+                {currentUser.name || "Account"} · Log out
+              </button>
+            </div>
           ) : (
             <button
               className="button button-dark button-small"
