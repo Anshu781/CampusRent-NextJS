@@ -6,6 +6,7 @@ import jwt from "jsonwebtoken";
 
 import connectDB from "../../../lib/mongodb";
 import Request from "../../../models/Request";
+import Listing from "../../../models/Listing";
 
 export const runtime = "nodejs";
 
@@ -201,15 +202,43 @@ export async function PATCH(request) {
 
     await connectDB();
 
+    const existingReq = await Request.findById(id);
+    if (!existingReq) {
+      return NextResponse.json({ message: "Request not found." }, { status: 404 });
+    }
+
+    const isNewlyApproved =
+      (status === "verified" || status === "approved") &&
+      existingReq.status !== "verified" &&
+      existingReq.status !== "approved";
+
+    // Dynamic stock adjustment upon admin approval:
+    if (isNewlyApproved) {
+      if (existingReq.mode === "buy") {
+        // Buyer approved: decrease available stock in DB
+        await Listing.findOneAndUpdate(
+          {
+            name: new RegExp(`^${existingReq.itemName.trim()}$`, "i"),
+            quantity: { $gt: 0 },
+          },
+          { $inc: { quantity: -1 } }
+        );
+      } else if (existingReq.mode === "rent") {
+        // Rental product approved: increase available stock in DB
+        await Listing.findOneAndUpdate(
+          {
+            name: new RegExp(`^${existingReq.itemName.trim()}$`, "i"),
+          },
+          { $inc: { quantity: 1 } }
+        );
+      }
+    }
+
     const updateFields = {};
     if (status) updateFields.status = status;
     if (adminNotes !== undefined) updateFields.adminNotes = adminNotes;
 
     const updated = await Request.findByIdAndUpdate(id, updateFields, { new: true });
-
-    if (!updated) {
-      return NextResponse.json({ message: "Request not found." }, { status: 404 });
-    }
 
     return NextResponse.json({ message: "Request updated successfully.", request: updated });
   } catch (error) {

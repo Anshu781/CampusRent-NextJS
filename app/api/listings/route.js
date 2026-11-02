@@ -2,85 +2,102 @@ import { NextResponse } from "next/server";
 import connectDB from "../../../lib/mongodb.js";
 import Listing from "../../../models/Listing.js";
 import mongoose from "mongoose";
+import jwt from "jsonwebtoken";
 
 const initialSeedItems = [
-  { name: "Electric kettle", category: "Appliances", price: 25, period: "day", emoji: "🫖", color: "peach", ownerName: "Aarav", hostel: "Kalam", block: "B", note: "1.5L · auto shut-off", quantity: 3 },
-  { name: "Steam iron", category: "Appliances", price: 20, period: "day", emoji: "👔", color: "lavender", ownerName: "Mehak", hostel: "Aryabhatta", block: "C", note: "Quick heat · easy to use", quantity: 2 },
-  { name: "Scientific calculator", category: "Study", price: 15, period: "day", emoji: "🧮", color: "mint", ownerName: "Rishabh", hostel: "CV Raman", block: "", note: "Exam-week friendly", quantity: 5 },
-  { name: "Cycle", category: "Mobility", price: 60, period: "day", emoji: "🚲", color: "blue", ownerName: "Sana", hostel: "Kalam", block: "D", note: "Lock included", quantity: 1 },
-  { name: "Desk lamp", category: "Study", price: 12, period: "day", emoji: "💡", color: "yellow", ownerName: "Kabir", hostel: "Aryabhatta", block: "A", note: "Warm + cool light", quantity: 4 },
-  { name: "Bluetooth speaker", category: "Electronics", price: 35, period: "day", emoji: "🔊", color: "pink", ownerName: "Ira", hostel: "Ashima", block: "", note: "Portable · great sound", quantity: 2 },
-  { name: "Extension board", category: "Appliances", price: 10, period: "day", emoji: "🔌", color: "mint", ownerName: "Dev", hostel: "Married Accommodation", block: "", note: "4 sockets · 2m cable", quantity: 6 },
-  { name: "Badminton set", category: "Sports", price: 30, period: "day", emoji: "🏸", color: "peach", ownerName: "Ananya", hostel: "Kalam", block: "A", note: "2 rackets + shuttle", quantity: 2 },
-  { name: "Laptop stand", category: "Electronics", price: 20, period: "day", emoji: "💻", color: "blue", ownerName: "Ishaan", hostel: "Kalam", block: "B", note: "Adjustable height", quantity: 3 },
-  { name: "Study table", category: "Furniture", price: 45, period: "day", emoji: "🪑", color: "yellow", ownerName: "Riya", hostel: "Aryabhatta", block: "B", note: "Compact study desk", quantity: 1 },
-  { name: "Office chair", category: "Furniture", price: 40, period: "day", emoji: "💺", color: "lavender", ownerName: "Arjun", hostel: "CV Raman", block: "", note: "Comfortable seat", quantity: 2 },
-  { name: "Room fan", category: "Appliances", price: 30, period: "day", emoji: "🌀", color: "mint", ownerName: "Diya", hostel: "Kalam", block: "C", note: "Portable table fan", quantity: 2 },
-  { name: "Mini refrigerator", category: "Appliances", price: 100, period: "day", emoji: "🧊", color: "blue", ownerName: "Nikhil", hostel: "Aryabhatta", block: "D", note: "Compact fridge", quantity: 1 },
-  { name: "Power bank", category: "Electronics", price: 20, period: "day", emoji: "🔋", color: "yellow", ownerName: "Aditi", hostel: "Kalam", block: "A", note: "10000 mAh", quantity: 4 },
-  { name: "USB-C charger", category: "Electronics", price: 15, period: "day", emoji: "🔌", color: "peach", ownerName: "Rahul", hostel: "CV Raman", block: "", note: "Fast charging", quantity: 5 },
-  { name: "HDMI cable", category: "Electronics", price: 8, period: "day", emoji: "🖥️", color: "lavender", ownerName: "Simran", hostel: "Kalam", block: "B", note: "2 metre cable", quantity: 3 },
-  { name: "Computer mouse", category: "Electronics", price: 10, period: "day", emoji: "🖱️", color: "mint", ownerName: "Yash", hostel: "Aryabhatta", block: "A", note: "Wireless mouse", quantity: 4 },
-  { name: "Keyboard", category: "Electronics", price: 15, period: "day", emoji: "⌨️", color: "blue", ownerName: "Pooja", hostel: "Kalam", block: "D", note: "USB keyboard", quantity: 2 },
-  { name: "Headphones", category: "Electronics", price: 25, period: "day", emoji: "🎧", color: "pink", ownerName: "Aditya", hostel: "Ashima", block: "", note: "Over-ear headphones", quantity: 2 },
-  { name: "Webcam", category: "Electronics", price: 20, period: "day", emoji: "📷", color: "yellow", ownerName: "Neha", hostel: "CV Raman", block: "", note: "Online classes", quantity: 2 },
-  { name: "Backpack", category: "Accessories", price: 15, period: "day", emoji: "🎒", color: "peach", ownerName: "Karan", hostel: "Kalam", block: "A", note: "Spacious backpack", quantity: 3 },
-  { name: "Rain umbrella", category: "Accessories", price: 8, period: "day", emoji: "☂️", color: "lavender", ownerName: "Tanya", hostel: "Aryabhatta", block: "C", note: "Full-size umbrella", quantity: 4 },
-  { name: "Yoga mat", category: "Sports", price: 12, period: "day", emoji: "🧘", color: "mint", ownerName: "Manav", hostel: "Kalam", block: "B", note: "Non-slip mat", quantity: 2 },
-  { name: "Cricket kit", category: "Sports", price: 50, period: "day", emoji: "🏏", color: "blue", ownerName: "Ishita", hostel: "CV Raman", block: "", note: "Bat and ball", quantity: 1 },
-  { name: "Football", category: "Sports", price: 20, period: "day", emoji: "⚽", color: "yellow", ownerName: "Varun", hostel: "Kalam", block: "C", note: "Standard football", quantity: 3 },
-  { name: "Basketball", category: "Sports", price: 25, period: "day", emoji: "🏀", color: "peach", ownerName: "Kriti", hostel: "Aryabhatta", block: "D", note: "Outdoor basketball", quantity: 2 },
-  { name: "Badminton racket", category: "Sports", price: 15, period: "day", emoji: "🏸", color: "lavender", ownerName: "Aman", hostel: "Kalam", block: "B", note: "Single racket", quantity: 4 },
-  { name: "Chess board", category: "Sports", price: 10, period: "day", emoji: "♟️", color: "mint", ownerName: "Mira", hostel: "CV Raman", block: "", note: "Wooden chess set", quantity: 2 },
-  { name: "Novel collection", category: "Books", price: 12, period: "day", emoji: "📚", color: "blue", ownerName: "Sahil", hostel: "Kalam", block: "D", note: "Fiction and classics", quantity: 6 },
-  { name: "Engineering textbook", category: "Books", price: 20, period: "day", emoji: "📖", color: "yellow", ownerName: "Naina", hostel: "Aryabhatta", block: "A", note: "Semester study material", quantity: 8 },
-  { name: "Drawing kit", category: "Study", price: 15, period: "day", emoji: "🎨", color: "pink", ownerName: "Om", hostel: "Kalam", block: "C", note: "Pencils and colours", quantity: 2 },
-  { name: "Whiteboard", category: "Study", price: 18, period: "day", emoji: "📝", color: "mint", ownerName: "Sara", hostel: "CV Raman", block: "", note: "Includes markers", quantity: 3 },
-  { name: "Tripod", category: "Electronics", price: 25, period: "day", emoji: "📱", color: "peach", ownerName: "Rohan", hostel: "Kalam", block: "A", note: "Phone tripod", quantity: 2 },
-  { name: "Ring light", category: "Electronics", price: 20, period: "day", emoji: "💡", color: "lavender", ownerName: "Anvi", hostel: "Aryabhatta", block: "B", note: "Adjustable brightness", quantity: 2 },
-  { name: "Induction cooktop", category: "Appliances", price: 50, period: "day", emoji: "🍳", color: "yellow", ownerName: "Vivek", hostel: "Ashima", block: "", note: "Portable cooktop", quantity: 1 },
-  { name: "Sandwich maker", category: "Appliances", price: 25, period: "day", emoji: "🥪", color: "mint", ownerName: "Isha", hostel: "Kalam", block: "D", note: "Non-stick plates", quantity: 2 },
-  { name: "Pressure cooker", category: "Appliances", price: 20, period: "day", emoji: "🍲", color: "peach", ownerName: "Harsh", hostel: "Aryabhatta", block: "C", note: "Small family size", quantity: 2 },
-  { name: "Storage boxes", category: "Home", price: 10, period: "day", emoji: "📦", color: "blue", ownerName: "Ayesha", hostel: "CV Raman", block: "", note: "Set of three", quantity: 5 },
-  { name: "Bedsheet set", category: "Home", price: 15, period: "day", emoji: "🛏️", color: "pink", ownerName: "Parth", hostel: "Kalam", block: "B", note: "Bedsheet and pillow covers", quantity: 3 },
-  { name: "Electric screwdriver", category: "Tools", price: 20, period: "day", emoji: "🪛", color: "yellow", ownerName: "Kush", hostel: "Aryabhatta", block: "D", note: "Basic repair kit", quantity: 2 }
+  { name: "Cycle", category: "Mobility", price: 60, period: "day", emoji: "🚲", color: "blue", ownerName: "Sana", sellerName: "Sana", sellerPhone: "9876543214", hostel: "Kalam", block: "D", room: "204", note: "Lock included · good brakes", quantity: 1, isNegotiable: true, createdAt: new Date(Date.now() - 86400000 * 3) },
+  { name: "Cycle", category: "Mobility", price: 50, period: "day", emoji: "🚲", color: "blue", ownerName: "Rohit", sellerName: "Rohit", sellerPhone: "9876543225", hostel: "Aryabhatta", block: "B", room: "112", note: "Geared mountain cycle", quantity: 1, isNegotiable: true, createdAt: new Date(Date.now() - 86400000 * 2) },
+  { name: "Electric kettle", category: "Appliances", price: 25, period: "day", emoji: "🫖", color: "peach", ownerName: "Aarav", sellerName: "Aarav", sellerPhone: "9876543210", hostel: "Kalam", block: "B", room: "305", note: "1.5L · auto shut-off", quantity: 2, isNegotiable: true, createdAt: new Date(Date.now() - 86400000 * 4) },
+  { name: "Electric kettle", category: "Appliances", price: 20, period: "day", emoji: "🫖", color: "peach", ownerName: "Priya", sellerName: "Priya", sellerPhone: "9876543211", hostel: "Ashima", block: "A", room: "102", note: "Pigeon electric kettle 1.2L", quantity: 1, isNegotiable: true, createdAt: new Date(Date.now() - 86400000 * 1) },
+  { name: "Steam iron", category: "Appliances", price: 20, period: "day", emoji: "👔", color: "lavender", ownerName: "Mehak", sellerName: "Mehak", sellerPhone: "9876543212", hostel: "Aryabhatta", block: "C", room: "219", note: "Quick heat · non-stick soleplate", quantity: 2, isNegotiable: true, createdAt: new Date(Date.now() - 86400000 * 5) },
+  { name: "Scientific calculator", category: "Study", price: 15, period: "day", emoji: "🧮", color: "mint", ownerName: "Rishabh", sellerName: "Rishabh", sellerPhone: "9876543213", hostel: "CV Raman", block: "A", room: "401", note: "Casio fx-991EX · exam approved", quantity: 3, isNegotiable: true, createdAt: new Date(Date.now() - 86400000 * 6) },
+  { name: "Desk lamp", category: "Study", price: 12, period: "day", emoji: "💡", color: "yellow", ownerName: "Kabir", sellerName: "Kabir", sellerPhone: "9876543215", hostel: "Aryabhatta", block: "A", room: "108", note: "Warm + cool light with USB", quantity: 2, isNegotiable: true, createdAt: new Date(Date.now() - 86400000 * 2) },
+  { name: "Bluetooth speaker", category: "Electronics", price: 35, period: "day", emoji: "🔊", color: "pink", ownerName: "Ira", sellerName: "Ira", sellerPhone: "9876543216", hostel: "Ashima", block: "B", room: "201", note: "boAt stone · great bass", quantity: 1, isNegotiable: true, createdAt: new Date(Date.now() - 86400000 * 3) },
+  { name: "Extension board", category: "Appliances", price: 10, period: "day", emoji: "🔌", color: "mint", ownerName: "Dev", sellerName: "Dev", sellerPhone: "9876543217", hostel: "Married Accommodation", block: "A", room: "12", note: "4 sockets · 2m cable surge protect", quantity: 4, isNegotiable: true, createdAt: new Date(Date.now() - 86400000 * 7) },
+  { name: "Badminton set", category: "Sports", price: 30, period: "day", emoji: "🏸", color: "peach", ownerName: "Ananya", sellerName: "Ananya", sellerPhone: "9876543218", hostel: "Kalam", block: "A", room: "310", note: "Yonex 2 rackets + 3 shuttles", quantity: 2, isNegotiable: true, createdAt: new Date(Date.now() - 86400000 * 4) },
+  { name: "Study table", category: "Furniture", price: 45, period: "day", emoji: "🪑", color: "yellow", ownerName: "Riya", sellerName: "Riya", sellerPhone: "9876543219", hostel: "Aryabhatta", block: "B", room: "220", note: "Foldable wooden study desk", quantity: 1, isNegotiable: true, createdAt: new Date(Date.now() - 86400000 * 8) },
+  { name: "Room fan", category: "Appliances", price: 30, period: "day", emoji: "🌀", color: "mint", ownerName: "Diya", sellerName: "Diya", sellerPhone: "9876543220", hostel: "Kalam", block: "C", room: "105", note: "High speed table fan", quantity: 2, isNegotiable: true, createdAt: new Date(Date.now() - 86400000 * 3) },
+  { name: "Mini refrigerator", category: "Appliances", price: 100, period: "day", emoji: "🧊", color: "blue", ownerName: "Nikhil", sellerName: "Nikhil", sellerPhone: "9876543221", hostel: "Aryabhatta", block: "D", room: "315", note: "Compact 45L fridge in good cooling condition", quantity: 1, isNegotiable: true, createdAt: new Date(Date.now() - 86400000 * 9) },
 ];
 
-// GET: Fetch all database listings and product counts
+function verifyAdmin(request) {
+  const token =
+    request.headers.get("x-admin-token") ||
+    request.headers.get("authorization")?.replace("Bearer ", "");
+
+  if (!token) return false;
+  if (token === (process.env.ADMIN_SECRET || "campusadmin123")) return true;
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "campusrent_jwt_secret");
+    return decoded && decoded.role === "admin";
+  } catch {
+    return false;
+  }
+}
+
+// GET: Fetch all database listings, counts, and FCFS seller queues
 export async function GET() {
   try {
     await connectDB();
 
-    let listings = await Listing.find({ status: { $ne: "removed" } }).sort({ createdAt: -1 });
+    let listings = await Listing.find({ status: { $ne: "removed" } }).sort({ createdAt: 1 });
 
-    // If database has 0 listings, auto-seed initial items
+    // Auto-seed if database is completely fresh
     if (listings.length === 0) {
       await Listing.insertMany(initialSeedItems);
-      listings = await Listing.find({ status: { $ne: "removed" } }).sort({ createdAt: -1 });
+      listings = await Listing.find({ status: { $ne: "removed" } }).sort({ createdAt: 1 });
     }
 
-    // Calculate count of each product present in DB
+    // Real database counts (sum of quantities of available items)
     const counts = {};
+    const fcfsSellers = {};
+
     for (const item of listings) {
       const key = item.name.toLowerCase().trim();
-      counts[key] = (counts[key] || 0) + (item.quantity || 1);
+      const properName = item.name;
+
+      if (item.status === "available" && item.quantity > 0) {
+        counts[key] = (counts[key] || 0) + item.quantity;
+      }
+
+      // Group sellers in First-Come, First-Served (FCFS) order
+      if (!fcfsSellers[properName]) {
+        fcfsSellers[properName] = [];
+      }
+
+      fcfsSellers[properName].push({
+        id: item._id.toString(),
+        sellerName: item.sellerName || item.ownerName || "Student Seller",
+        sellerPhone: item.sellerPhone || "Contact via Admin",
+        hostel: item.hostel,
+        block: item.block,
+        room: item.room,
+        price: item.price,
+        period: item.period || "day",
+        note: item.note,
+        quantity: item.quantity,
+        status: item.status,
+        createdAt: item.createdAt,
+      });
     }
 
     return NextResponse.json({
       listings,
       counts,
-      totalCount: listings.reduce((sum, item) => sum + (item.quantity || 1), 0),
+      fcfsSellers,
+      totalCount: listings.reduce((sum, item) => sum + (item.quantity || 0), 0),
     });
   } catch (error) {
     console.error("Error fetching listings:", error);
     return NextResponse.json(
-      { message: "Could not fetch database listings.", listings: [], counts: {} },
+      { message: "Could not fetch database listings.", listings: [], counts: {}, fcfsSellers: {} },
       { status: 500 }
     );
   }
 }
 
-// POST: Add a new rental or buy product into the database
+// POST: Add a new rental/lending listing (by student seller or admin)
 export async function POST(request) {
   try {
     const body = await request.json();
@@ -100,6 +117,8 @@ export async function POST(request) {
       quantity,
       owner,
       ownerName,
+      sellerName,
+      sellerPhone,
     } = body;
 
     if (!name?.trim()) {
@@ -125,12 +144,15 @@ export async function POST(request) {
       color: color || "mint",
       quantity: Number(quantity) > 0 ? Number(quantity) : 1,
       owner: owner && mongoose.Types.ObjectId.isValid(owner) ? owner : undefined,
-      ownerName: ownerName?.trim() || "Campus Admin",
+      ownerName: ownerName?.trim() || sellerName?.trim() || "Campus Student",
+      sellerName: sellerName?.trim() || ownerName?.trim() || "Campus Student",
+      sellerPhone: sellerPhone?.trim() || "",
+      isNegotiable: true,
       status: "available",
     });
 
     return NextResponse.json(
-      { message: "Product added to database listings successfully.", listing },
+      { message: "Listing added to database and placed in FCFS seller queue!", listing },
       { status: 201 }
     );
   } catch (error) {
@@ -143,8 +165,40 @@ export async function POST(request) {
   }
 }
 
+// PATCH: Update listing (e.g. mark as lent, update quantity, etc.)
+export async function PATCH(request) {
+  if (!verifyAdmin(request)) {
+    return NextResponse.json({ message: "Admin authorization required." }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    const { id, status, quantity } = body;
+
+    if (!id) {
+      return NextResponse.json({ message: "Listing ID is required." }, { status: 400 });
+    }
+
+    await connectDB();
+    const updateFields = {};
+    if (status) updateFields.status = status;
+    if (quantity !== undefined) updateFields.quantity = Number(quantity);
+
+    const updated = await Listing.findByIdAndUpdate(id, updateFields, { new: true });
+
+    return NextResponse.json({ message: "Listing updated successfully.", listing: updated });
+  } catch (error) {
+    console.error("Error updating listing:", error);
+    return NextResponse.json({ message: "Could not update listing." }, { status: 500 });
+  }
+}
+
 // DELETE: Remove product from database
 export async function DELETE(request) {
+  if (!verifyAdmin(request)) {
+    return NextResponse.json({ message: "Admin authorization required." }, { status: 401 });
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");

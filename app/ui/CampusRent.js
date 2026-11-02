@@ -80,8 +80,10 @@ const emptyListing = {
   name: "",
   category: "Appliances",
   price: "",
+  sellerPhone: "",
   hostel: "Kalam",
   block: "A",
+  room: "",
   note: ""
 };
 
@@ -237,6 +239,51 @@ function requestItem(item, mode = "rent") {
   setRequestBlock(item.block || "A");
   setRequestRoom("");
   setRequestOpen(true);
+}
+
+async function submitListing(e) {
+  e.preventDefault();
+  if (!currentUser) {
+    showNotice("Please log in to list an item.");
+    return;
+  }
+  if (!listing.name?.trim()) {
+    showNotice("Please provide the item name.");
+    return;
+  }
+  if (!listing.sellerPhone?.trim() || listing.sellerPhone.trim().length < 8) {
+    showNotice("Please enter your contact phone number so admin can reach you.");
+    return;
+  }
+
+  setListingLoading(true);
+  try {
+    const res = await fetch("/api/listings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...listing,
+        sellerName: currentUser.name || "Student Seller",
+        ownerName: currentUser.name || "Student Seller",
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Failed to submit listing.");
+
+    setListingOpen(false);
+    setListing(emptyListing);
+    showNotice("Item listed! You are now in the FCFS seller queue. Our admin will call you when a student requests this item.");
+
+    fetch("/api/listings")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.counts) setDbCounts(d.counts);
+      });
+  } catch (err) {
+    showNotice(err.message || "Error submitting listing.");
+  } finally {
+    setListingLoading(false);
+  }
 }
 
 
@@ -623,9 +670,16 @@ async function submitRequest(e) {
                     <span className="product-category">{item.category}</span>
                     <span
                       className="stock-badge"
-                      title="Stock count present in campus database"
+                      title="Real stock count present in campus database"
+                      style={{
+                        background: (dbCounts[item.name.toLowerCase().trim()] ?? item.quantity) > 0 ? "#e5f5d8" : "#fee2e2",
+                        color: (dbCounts[item.name.toLowerCase().trim()] ?? item.quantity) > 0 ? "#1e3a1e" : "#991b1b",
+                        borderColor: (dbCounts[item.name.toLowerCase().trim()] ?? item.quantity) > 0 ? "#c7e6b0" : "#fecaca"
+                      }}
                     >
-                      📦 {dbCounts[item.name.toLowerCase().trim()] || item.quantity || 1} in DB
+                      📦 {(dbCounts[item.name.toLowerCase().trim()] ?? item.quantity) > 0
+                        ? `${dbCounts[item.name.toLowerCase().trim()] ?? item.quantity} in DB`
+                        : "Out of stock"}
                     </span>
                   </div>
                   <h3>{item.name}</h3>
@@ -634,8 +688,13 @@ async function submitRequest(e) {
                     <MapPin size={13} /> {locationLabel(item)}
                   </div>
                   <div className="product-footer">
-                    <div className="price">
-                      ₹{item.price}<span> / {item.period || "day"}</span>
+                    <div>
+                      <div className="price">
+                        ₹{item.price}<span> / {item.period || "day"}</span>
+                      </div>
+                      <span style={{ fontSize: 10, color: "#16a34a", fontWeight: 700, display: "block", marginTop: 2 }}>
+                        💬 Price open to bargain
+                      </span>
                     </div>
                     
 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -1037,6 +1096,27 @@ async function submitRequest(e) {
 
               <div
                 style={{
+                  background: "#eff6ff",
+                  border: "1px solid #bfdbfe",
+                  borderRadius: 8,
+                  padding: "10px 14px",
+                  fontSize: 12,
+                  color: "#1e40af",
+                  margin: "12px 0",
+                  lineHeight: 1.5,
+                  display: "flex",
+                  gap: 8,
+                  alignItems: "center",
+                }}
+              >
+                <span>💬</span>
+                <div>
+                  <b>Price is Negotiable:</b> Listed pricing is open to bargain with the student seller via our admin team!
+                </div>
+              </div>
+
+              <div
+                style={{
                   background: "#f0fdf4",
                   border: "1px solid #bbf7d0",
                   borderRadius: 8,
@@ -1073,6 +1153,163 @@ async function submitRequest(e) {
                   : requestMode === "rent"
                     ? "Submit rental request"
                     : "Submit buy request"}
+                <ArrowRight size={16} />
+              </button>
+            </form>
+          </section>
+        </div>
+      )}
+
+      {listingOpen && (
+        <div
+          style={modalStyle}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setListingOpen(false);
+          }}
+        >
+          <section
+            style={panelStyle}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="listing-title"
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+              <div>
+                <p style={{ margin: "0 0 6px", color: "#64748b", fontSize: 12 }}>
+                  CAMPUS LENDER PROGRAM
+                </p>
+                <h2 id="listing-title" style={{ margin: 0, fontSize: 24, fontWeight: 800 }}>
+                  List an item to rent out
+                </h2>
+              </div>
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => setListingOpen(false)}
+                style={{ border: 0, background: "transparent", cursor: "pointer" }}
+              >
+                <X />
+              </button>
+            </div>
+
+            <form onSubmit={submitListing} style={{ marginTop: 20 }}>
+              <label style={labelStyle}>
+                Item name *
+                <input
+                  required
+                  style={fieldStyle}
+                  placeholder="e.g. Cycle, Steam Iron, Electric Kettle..."
+                  value={listing.name}
+                  onChange={(e) => setListing({ ...listing, name: e.target.value })}
+                />
+              </label>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <label style={labelStyle}>
+                  Category *
+                  <select
+                    style={fieldStyle}
+                    value={listing.category}
+                    onChange={(e) => setListing({ ...listing, category: e.target.value })}
+                  >
+                    {categories.filter(c => c !== "Everything").map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label style={labelStyle}>
+                  Price (₹/day) *
+                  <input
+                    type="number"
+                    required
+                    style={fieldStyle}
+                    placeholder="e.g. 25"
+                    value={listing.price}
+                    onChange={(e) => setListing({ ...listing, price: e.target.value })}
+                  />
+                </label>
+              </div>
+
+              <label style={labelStyle}>
+                Your Contact Phone Number *
+                <input
+                  type="tel"
+                  required
+                  style={fieldStyle}
+                  placeholder="e.g. 9876543210 (so Admin can contact you)"
+                  value={listing.sellerPhone}
+                  onChange={(e) => setListing({ ...listing, sellerPhone: e.target.value })}
+                />
+              </label>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr", gap: 10 }}>
+                <label style={labelStyle}>
+                  Hostel *
+                  <select
+                    style={fieldStyle}
+                    value={listing.hostel}
+                    onChange={(e) => setListing({ ...listing, hostel: e.target.value })}
+                  >
+                    {["Kalam", "Aryabhatta", "CV Raman", "Married Accommodation", "Ashima", "Entire hostel"].map((h) => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label style={labelStyle}>
+                  Block
+                  <input
+                    style={fieldStyle}
+                    placeholder="A, B, C..."
+                    value={listing.block}
+                    onChange={(e) => setListing({ ...listing, block: e.target.value })}
+                  />
+                </label>
+
+                <label style={labelStyle}>
+                  Room
+                  <input
+                    style={fieldStyle}
+                    placeholder="214"
+                    value={listing.room}
+                    onChange={(e) => setListing({ ...listing, room: e.target.value })}
+                  />
+                </label>
+              </div>
+
+              <label style={labelStyle}>
+                Condition details / Note
+                <input
+                  style={fieldStyle}
+                  placeholder="e.g. Tested working, lock included"
+                  value={listing.note}
+                  onChange={(e) => setListing({ ...listing, note: e.target.value })}
+                />
+              </label>
+
+              <div
+                style={{
+                  background: "#f0fdf4",
+                  border: "1px solid #bbf7d0",
+                  borderRadius: 8,
+                  padding: "10px 14px",
+                  fontSize: 12,
+                  color: "#166534",
+                  margin: "12px 0",
+                  lineHeight: 1.5,
+                }}
+              >
+                📋 <b>FCFS Seller Priority:</b> You will be placed into the First-Come First-Served seller queue for your product. When a student requests this item, our campus admin will call your number to inspect and coordinate!
+              </div>
+
+              <button
+                className="button button-dark"
+                type="submit"
+                disabled={listingLoading}
+                style={{ width: "100%", justifyContent: "center", opacity: listingLoading ? 0.7 : 1 }}
+              >
+                {listingLoading ? "Listing item..." : "Submit Listing"}
                 <ArrowRight size={16} />
               </button>
             </form>

@@ -6,7 +6,7 @@ import {
   PackageCheck, ArrowLeft, Phone, MessageSquare, CheckCircle,
   XCircle, Clock, Trash2, Plus, RefreshCw, Eye, AlertCircle,
   Filter, Search, MapPin, ShieldCheck, Tag, ShoppingCart, Lock,
-  LogOut, KeyRound, UserCheck
+  LogOut, KeyRound, UserCheck, Users, BadgeCheck, Check, Info
 } from "lucide-react";
 
 export default function AdminDashboard() {
@@ -21,10 +21,12 @@ export default function AdminDashboard() {
   const [loginError, setLoginError] = useState("");
 
   // Dashboard state
-  const [activeTab, setActiveTab] = useState("requests"); // "requests" | "inventory"
+  const [activeTab, setActiveTab] = useState("requests"); // "requests" | "sellers" | "inventory"
   const [requests, setRequests] = useState([]);
   const [listings, setListings] = useState([]);
   const [dbCounts, setDbCounts] = useState({});
+  const [fcfsSellers, setFcfsSellers] = useState({});
+  const [selectedProduct, setSelectedProduct] = useState("Cycle");
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [notice, setNotice] = useState("");
@@ -51,6 +53,8 @@ export default function AdminDashboard() {
     note: "",
     emoji: "📦",
     ownerName: "Campus Admin",
+    sellerName: "Student Seller",
+    sellerPhone: "",
     photo: "",
   });
 
@@ -114,6 +118,7 @@ export default function AdminDashboard() {
     setIsAdminAuthenticated(false);
     setRequests([]);
     setListings([]);
+    setFcfsSellers({});
     showToast("Logged out of Admin Console.");
   }
 
@@ -144,6 +149,11 @@ export default function AdminDashboard() {
       if (listRes.ok) {
         setListings(listData.listings || []);
         setDbCounts(listData.counts || {});
+        setFcfsSellers(listData.fcfsSellers || {});
+        const productNames = Object.keys(listData.fcfsSellers || {});
+        if (productNames.length > 0 && !selectedProduct) {
+          setSelectedProduct(productNames[0]);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -154,6 +164,7 @@ export default function AdminDashboard() {
   }
 
   // Update request status (pending, contacted, verified, rejected)
+  // Approving a BUY request automatically decreases product stock in DB!
   async function handleUpdateStatus(id, newStatus) {
     setActionLoading(true);
     try {
@@ -172,7 +183,34 @@ export default function AdminDashboard() {
       setRequests((prev) =>
         prev.map((r) => (r._id === id ? { ...r, status: newStatus } : r))
       );
-      showToast(`Request marked as "${newStatus}"!`);
+
+      showToast(`Request marked as "${newStatus}"! Dynamic DB stock updated.`);
+      loadData();
+    } catch (err) {
+      showToast(err.message);
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  // Update seller listing status (available, lent, etc.)
+  async function handleUpdateSellerListing(id, newStatus) {
+    setActionLoading(true);
+    try {
+      const res = await fetch("/api/listings", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-token": adminToken,
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ id, status: newStatus }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to update listing");
+
+      showToast(`Seller listing marked as ${newStatus}!`);
+      loadData();
     } catch (err) {
       showToast(err.message);
     } finally {
@@ -254,7 +292,7 @@ export default function AdminDashboard() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Could not add product");
 
-      showToast(`"${newProduct.name}" added to database listings!`);
+      showToast(`"${newProduct.name}" added to database and placed in FCFS queue!`);
       setShowAddForm(false);
       setNewProduct({
         name: "",
@@ -268,6 +306,8 @@ export default function AdminDashboard() {
         note: "",
         emoji: "📦",
         ownerName: "Campus Admin",
+        sellerName: "Student Seller",
+        sellerPhone: "",
         photo: "",
       });
       loadData();
@@ -292,6 +332,8 @@ export default function AdminDashboard() {
       note: `Verified from user request (${req.phone})`,
       emoji: "📦",
       ownerName: req.userName || `Student (${req.hostel})`,
+      sellerName: req.userName || `Student (${req.hostel})`,
+      sellerPhone: req.phone || "",
       photo: req.photo || "",
     });
     setConvertModalRequest(req);
@@ -322,9 +364,12 @@ export default function AdminDashboard() {
   const pendingCount = requests.filter((r) => r.status === "pending").length;
   const verifiedCount = requests.filter((r) => r.status === "verified").length;
   const totalStockCount = listings.reduce(
-    (sum, item) => sum + (item.quantity || 1),
+    (sum, item) => sum + (item.quantity || 0),
     0
   );
+
+  // Available product types for FCFS sellers
+  const availableProductTypes = Object.keys(fcfsSellers);
 
   // =========================================================================
   // VIEW 1: LOCKED ADMIN LOGIN SCREEN (When not authenticated)
@@ -364,7 +409,7 @@ export default function AdminDashboard() {
               CampusRent Admin Portal
             </h1>
             <p style={{ margin: 0, color: "#9ca899", fontSize: 13 }}>
-              Authorized campus administrator credentials required to access customer requests and inventory controls.
+              Authorized campus administrator credentials required to access customer requests, FCFS seller contacts, and inventory controls.
             </p>
           </div>
 
@@ -564,7 +609,7 @@ export default function AdminDashboard() {
               gap: 5,
             }}
           >
-            <UserCheck size={14} /> Admin Verified
+            <UserCheck size={14} /> Admin Authenticated
           </span>
 
           <button
@@ -638,13 +683,15 @@ export default function AdminDashboard() {
                 fontFamily: "monospace",
               }}
             >
-              <ShieldCheck size={14} /> SECURE CAMPUS INTERMEDIARY WORKFLOW
+              <ShieldCheck size={14} /> ADMIN INTERMEDIARY & FCFS DISPATCH DESK
             </div>
             <h2 style={{ margin: "6px 0 4px", fontSize: 20, fontWeight: 800 }}>
-              Buyer & Seller Verification Desk (Restricted)
+              Campus Verification & Seller Contact Desk
             </h2>
-            <p style={{ margin: 0, color: "#9ca899", fontSize: 13, maxWidth: 700, lineHeight: 1.5 }}>
-              This portal is restricted to administrators. Contact students via phone to inspect products, verify room & hostel numbers, and approve or reject requests.
+            <p style={{ margin: 0, color: "#9ca899", fontSize: 13, maxWidth: 780, lineHeight: 1.5 }}>
+              ⚡ <b>Dynamic Stock Tracking:</b> Approving a buyer request automatically decreases stock count in DB. Approving a rental product increases stock.
+              <br />
+              📋 <b>FCFS Seller Queue:</b> Look up the First-Come, First-Served queue of student sellers per listing (e.g. Cycle, Kettle), call the seller directly, and negotiate or arrange item pickup.
             </p>
           </div>
 
@@ -728,13 +775,13 @@ export default function AdminDashboard() {
             }}
           >
             <span style={{ fontSize: 11, color: "#6e7b6d", fontWeight: 700, letterSpacing: 0.5 }}>
-              DATABASE PRODUCTS
+              PRODUCT TYPES IN DB
             </span>
             <div style={{ fontSize: 28, fontWeight: 800, marginTop: 4 }}>
-              {listings.length}
+              {availableProductTypes.length || listings.length}
             </div>
             <span style={{ fontSize: 12, color: "#8a9688" }}>
-              Unique catalog items in DB
+              Active product listings
             </span>
           </div>
 
@@ -747,13 +794,13 @@ export default function AdminDashboard() {
             }}
           >
             <span style={{ fontSize: 11, color: "#6e7b6d", fontWeight: 700, letterSpacing: 0.5 }}>
-              TOTAL INVENTORY UNITS
+              REAL INVENTORY UNITS
             </span>
             <div style={{ fontSize: 28, fontWeight: 800, marginTop: 4, color: "#166534" }}>
               {totalStockCount} units
             </div>
             <span style={{ fontSize: 12, color: "#8a9688" }}>
-              Sum of counts across DB
+              Strict database count
             </span>
           </div>
         </div>
@@ -790,6 +837,26 @@ export default function AdminDashboard() {
           </button>
 
           <button
+            onClick={() => setActiveTab("sellers")}
+            style={{
+              background: "transparent",
+              border: 0,
+              padding: "10px 18px",
+              fontSize: 14,
+              fontWeight: 800,
+              cursor: "pointer",
+              color: activeTab === "sellers" ? "#17251f" : "#6f7d6e",
+              borderBottom: activeTab === "sellers" ? "3px solid #17251f" : "3px solid transparent",
+              marginBottom: -6,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <Users size={16} /> FCFS Sellers Directory (Listing-Wise)
+          </button>
+
+          <button
             onClick={() => setActiveTab("inventory")}
             style={{
               background: "transparent",
@@ -806,7 +873,7 @@ export default function AdminDashboard() {
               gap: 8,
             }}
           >
-            <Tag size={16} /> Database Listings & Inventory ({listings.length})
+            <Tag size={16} /> All Database Products ({listings.length})
           </button>
         </div>
 
@@ -1096,7 +1163,7 @@ export default function AdminDashboard() {
                         >
                           <option value="pending">Mark Pending</option>
                           <option value="contacted">Mark Contacted</option>
-                          <option value="verified">Verify & Approve</option>
+                          <option value="verified">Verify & Approve (Updates DB Stock)</option>
                           <option value="rejected">Mark Rejected</option>
                         </select>
 
@@ -1149,7 +1216,320 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ================= TAB 2: INVENTORY & LISTINGS MANAGEMENT ================= */}
+        {/* ================= TAB 2: FCFS SELLERS DIRECTORY (LISTING-WISE) ================= */}
+        {activeTab === "sellers" && (
+          <div>
+            <div style={{ marginBottom: 18 }}>
+              <h2 style={{ margin: "0 0 6px", fontSize: 18, fontWeight: 800 }}>
+                First-Come, First-Served (FCFS) Seller Contact Directory
+              </h2>
+              <p style={{ margin: 0, color: "#64748b", fontSize: 13 }}>
+                Select any listing below (e.g. <b>Cycle</b>, <b>Electric kettle</b>). You will see the exact queue of student sellers who offered that item in chronological order. Contact the #1 FCFS seller personally to ask for the product!
+              </p>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 20 }}>
+              {/* Left Column: Product Selection */}
+              <div
+                style={{
+                  background: "#ffffff",
+                  border: "1px solid #e1e7dc",
+                  borderRadius: 8,
+                  padding: "14px 10px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  maxHeight: "70vh",
+                  overflowY: "auto",
+                }}
+              >
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#788476", padding: "4px 8px", letterSpacing: 0.5 }}>
+                  SELECT PRODUCT CATEGORY
+                </div>
+
+                {availableProductTypes.map((prodName) => {
+                  const sellers = fcfsSellers[prodName] || [];
+                  const isSelected = selectedProduct.toLowerCase() === prodName.toLowerCase();
+
+                  return (
+                    <button
+                      key={prodName}
+                      onClick={() => setSelectedProduct(prodName)}
+                      style={{
+                        textAlign: "left",
+                        padding: "10px 12px",
+                        borderRadius: 6,
+                        border: isSelected ? "2px solid #17251f" : "1px solid #edf0e7",
+                        background: isSelected ? "#e9f2e4" : "#ffffff",
+                        cursor: "pointer",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: 13, color: "#17251f" }}>
+                          {prodName}
+                        </div>
+                        <div style={{ fontSize: 11, color: "#6e7b6d" }}>
+                          {sellers.length} seller{sellers.length !== 1 ? "s" : ""} queued
+                        </div>
+                      </div>
+
+                      <span
+                        style={{
+                          background: isSelected ? "#17251f" : "#edf0e7",
+                          color: isSelected ? "#c8f169" : "#4b574a",
+                          fontSize: 10,
+                          fontWeight: 700,
+                          padding: "3px 7px",
+                          borderRadius: 12,
+                          fontFamily: "monospace",
+                        }}
+                      >
+                        FCFS
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Right Column: FCFS Queue for Selected Product */}
+              <div>
+                <div
+                  style={{
+                    background: "#ffffff",
+                    border: "1px solid #e1e7dc",
+                    borderRadius: 8,
+                    padding: "20px 22px",
+                    marginBottom: 16,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    gap: 12,
+                  }}
+                >
+                  <div>
+                    <span style={{ fontSize: 11, color: "#166534", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                      ACTIVE LENDER QUEUE
+                    </span>
+                    <h3 style={{ margin: "4px 0 2px", fontSize: 22, fontWeight: 800 }}>
+                      {selectedProduct} Sellers ({ (fcfsSellers[selectedProduct] || []).length } in queue)
+                    </h3>
+                    <p style={{ margin: 0, fontSize: 12, color: "#64748b" }}>
+                      Sorted strictly by submission date (First-Come First-Served). Contact #1 seller first.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setNewProduct({
+                        ...newProduct,
+                        name: selectedProduct,
+                      });
+                      setShowAddForm(true);
+                      setActiveTab("inventory");
+                    }}
+                    style={{
+                      background: "#17251f",
+                      color: "#c8f169",
+                      border: 0,
+                      borderRadius: 6,
+                      padding: "8px 14px",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <Plus size={14} /> Add Seller for {selectedProduct}
+                  </button>
+                </div>
+
+                {/* Queue list */}
+                {(!fcfsSellers[selectedProduct] || fcfsSellers[selectedProduct].length === 0) ? (
+                  <div style={{ background: "#ffffff", padding: 40, borderRadius: 8, textAlign: "center", border: "1px dashed #d1d8cb" }}>
+                    <p style={{ margin: 0, color: "#64748b" }}>No sellers currently listed for {selectedProduct}.</p>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    {fcfsSellers[selectedProduct].map((seller, index) => {
+                      const cleanPhone = (seller.sellerPhone || "").replace(/\D/g, "");
+                      const isFirst = index === 0;
+
+                      return (
+                        <div
+                          key={seller.id || index}
+                          style={{
+                            background: isFirst ? "#fafff5" : "#ffffff",
+                            border: isFirst ? "2px solid #84cc16" : "1px solid #e1e7dc",
+                            borderRadius: 8,
+                            padding: "16px 20px",
+                            display: "grid",
+                            gridTemplateColumns: "70px 1.4fr 1.3fr 1.2fr",
+                            gap: 16,
+                            alignItems: "center",
+                            boxShadow: isFirst ? "0 4px 14px rgba(132, 204, 22, 0.12)" : "none",
+                          }}
+                        >
+                          {/* FCFS Rank */}
+                          <div style={{ textAlign: "center" }}>
+                            <span
+                              style={{
+                                display: "inline-block",
+                                width: 38,
+                                height: 38,
+                                borderRadius: "50%",
+                                background: isFirst ? "#84cc16" : "#e8ede2",
+                                color: isFirst ? "#ffffff" : "#243d26",
+                                fontWeight: 800,
+                                fontSize: 16,
+                                lineHeight: "38px",
+                              }}
+                            >
+                              #{index + 1}
+                            </span>
+                            <div style={{ fontSize: 9, fontWeight: 700, color: isFirst ? "#4d7c0f" : "#8a9688", marginTop: 4 }}>
+                              {isFirst ? "TOP PRIORITY" : "FCFS QUEUE"}
+                            </div>
+                          </div>
+
+                          {/* Seller Details */}
+                          <div>
+                            <div style={{ fontSize: 15, fontWeight: 800, color: "#17251f" }}>
+                              {seller.sellerName}
+                            </div>
+                            <div style={{ fontSize: 12, color: "#546253", marginTop: 2 }}>
+                              📍 Hostel {seller.hostel} · Block {seller.block || "A"} {seller.room ? `· Room ${seller.room}` : ""}
+                            </div>
+                            <div style={{ fontSize: 11, color: "#788476", marginTop: 4 }}>
+                              📝 Note: {seller.note || "Available for campus rental"}
+                            </div>
+                            <div style={{ fontSize: 11, color: "#059669", fontWeight: 700, marginTop: 4 }}>
+                              ₹{seller.price}/{seller.period} · 💬 Open to Bargain
+                            </div>
+                          </div>
+
+                          {/* Phone Contact */}
+                          <div>
+                            <span style={{ fontSize: 10, color: "#64748b", fontWeight: 700, letterSpacing: 0.5 }}>
+                              SELLER DIRECT CONTACT:
+                            </span>
+                            <div style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", marginTop: 2 }}>
+                              📞 {seller.sellerPhone || "Contact via Student Directory"}
+                            </div>
+
+                            {seller.sellerPhone && (
+                              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                                <a
+                                  href={`tel:${cleanPhone}`}
+                                  style={{
+                                    background: "#0284c7",
+                                    color: "#ffffff",
+                                    padding: "5px 10px",
+                                    borderRadius: 4,
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    textDecoration: "none",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 4,
+                                  }}
+                                >
+                                  <Phone size={12} /> Call Seller
+                                </a>
+
+                                <a
+                                  href={`https://wa.me/91${cleanPhone}?text=Hi%20${encodeURIComponent(seller.sellerName)}%2C%20this%20is%20CampusRent%20Admin.%20We%20have%20a%20student%20who%20wants%20to%20rent%20your%20${encodeURIComponent(selectedProduct)}.`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  style={{
+                                    background: "#16a34a",
+                                    color: "#ffffff",
+                                    padding: "5px 10px",
+                                    borderRadius: 4,
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    textDecoration: "none",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 4,
+                                  }}
+                                >
+                                  <MessageSquare size={12} /> WhatsApp
+                                </a>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Action Button */}
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            <span
+                              style={{
+                                fontSize: 10,
+                                fontWeight: 700,
+                                padding: "3px 8px",
+                                borderRadius: 4,
+                                background: seller.status === "lent" ? "#fef3c7" : "#dcfce7",
+                                color: seller.status === "lent" ? "#92400e" : "#166534",
+                                textAlign: "center",
+                              }}
+                            >
+                              Status: {seller.status?.toUpperCase() || "AVAILABLE"}
+                            </span>
+
+                            {seller.status !== "lent" ? (
+                              <button
+                                onClick={() => handleUpdateSellerListing(seller.id, "lent")}
+                                style={{
+                                  background: "#17251f",
+                                  color: "#c8f169",
+                                  border: 0,
+                                  padding: "7px 10px",
+                                  borderRadius: 4,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  cursor: "pointer",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  gap: 5,
+                                }}
+                              >
+                                <Check size={13} /> Lend From This Seller
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleUpdateSellerListing(seller.id, "available")}
+                                style={{
+                                  background: "#e8ede2",
+                                  border: "1px solid #ccd8c5",
+                                  color: "#283b27",
+                                  padding: "7px 10px",
+                                  borderRadius: 4,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  cursor: "pointer",
+                                }}
+                              >
+                                Return / Mark Available
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ================= TAB 3: ALL DATABASE PRODUCTS ================= */}
         {activeTab === "inventory" && (
           <div>
             <div
@@ -1220,7 +1600,7 @@ export default function AdminDashboard() {
                     Product Name *
                     <input
                       required
-                      placeholder="e.g. Electric Kettle, Study Table..."
+                      placeholder="e.g. Cycle, Electric Kettle, Study Table..."
                       value={newProduct.name}
                       onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
                       style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid #cbd5e1" }}
@@ -1270,6 +1650,28 @@ export default function AdminDashboard() {
                   </label>
 
                   <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, fontWeight: 700 }}>
+                    Seller Name *
+                    <input
+                      required
+                      placeholder="e.g. Sana or Student Seller"
+                      value={newProduct.sellerName}
+                      onChange={(e) => setNewProduct({ ...newProduct, sellerName: e.target.value, ownerName: e.target.value })}
+                      style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid #cbd5e1" }}
+                    />
+                  </label>
+
+                  <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, fontWeight: 700 }}>
+                    Seller Phone Number *
+                    <input
+                      required
+                      placeholder="e.g. 9876543210 (for FCFS lender queue)"
+                      value={newProduct.sellerPhone}
+                      onChange={(e) => setNewProduct({ ...newProduct, sellerPhone: e.target.value })}
+                      style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid #cbd5e1" }}
+                    />
+                  </label>
+
+                  <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, fontWeight: 700 }}>
                     Hostel Location *
                     <select
                       value={newProduct.hostel}
@@ -1307,26 +1709,6 @@ export default function AdminDashboard() {
                   </label>
 
                   <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, fontWeight: 700 }}>
-                    Owner / Verified Student Name
-                    <input
-                      placeholder="e.g. Campus Admin or Student Name"
-                      value={newProduct.ownerName}
-                      onChange={(e) => setNewProduct({ ...newProduct, ownerName: e.target.value })}
-                      style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid #cbd5e1" }}
-                    />
-                  </label>
-
-                  <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, fontWeight: 700 }}>
-                    Emoji Icon
-                    <input
-                      placeholder="e.g. 🫖, 🚲, 💡, 🪑"
-                      value={newProduct.emoji}
-                      onChange={(e) => setNewProduct({ ...newProduct, emoji: e.target.value })}
-                      style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid #cbd5e1" }}
-                    />
-                  </label>
-
-                  <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, fontWeight: 700 }}>
                     Note / Condition Details
                     <input
                       placeholder="e.g. Excellent condition · tested working"
@@ -1352,7 +1734,7 @@ export default function AdminDashboard() {
                       cursor: "pointer",
                     }}
                   >
-                    {actionLoading ? "Saving..." : "Save Product to Database"}
+                    {actionLoading ? "Saving..." : "Save Product & Enter into FCFS Queue"}
                   </button>
 
                   <button
@@ -1379,7 +1761,7 @@ export default function AdminDashboard() {
             {/* Listings Grid */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
               {listings.map((item) => {
-                const countInDb = dbCounts[item.name.toLowerCase().trim()] || item.quantity || 1;
+                const countInDb = dbCounts[item.name.toLowerCase().trim()] || item.quantity || 0;
 
                 return (
                   <div
@@ -1399,9 +1781,9 @@ export default function AdminDashboard() {
                         <span style={{ fontSize: 32 }}>{item.emoji || "📦"}</span>
                         <span
                           style={{
-                            background: "#dcfce7",
-                            color: "#166534",
-                            border: "1px solid #bbf7d0",
+                            background: countInDb > 0 ? "#dcfce7" : "#fee2e2",
+                            color: countInDb > 0 ? "#166534" : "#991b1b",
+                            border: `1px solid ${countInDb > 0 ? "#bbf7d0" : "#fecaca"}`,
                             padding: "3px 8px",
                             borderRadius: 4,
                             fontSize: 11,
@@ -1409,7 +1791,7 @@ export default function AdminDashboard() {
                             fontWeight: 700,
                           }}
                         >
-                          Count in DB: {countInDb}
+                          {countInDb > 0 ? `Count in DB: ${countInDb}` : "Out of Stock"}
                         </span>
                       </div>
 
@@ -1430,6 +1812,7 @@ export default function AdminDashboard() {
 
                       <div style={{ marginTop: 10, fontSize: 14, fontWeight: 800, color: "#17251f" }}>
                         ₹{item.price} <span style={{ fontSize: 11, fontWeight: 500, color: "#8a9688" }}>/ {item.period || "day"}</span>
+                        <span style={{ fontSize: 11, color: "#059669", marginLeft: 8, fontWeight: 600 }}>💬 Negotiable</span>
                       </div>
                     </div>
 
@@ -1444,7 +1827,8 @@ export default function AdminDashboard() {
                       }}
                     >
                       <span style={{ fontSize: 11, color: "#8a9688" }}>
-                        By <b>{item.ownerName || "Campus Admin"}</b>
+                        Seller: <b>{item.sellerName || item.ownerName || "Student"}</b>
+                        {item.sellerPhone && <div style={{ fontSize: 10, color: "#0284c7" }}>📞 {item.sellerPhone}</div>}
                       </span>
 
                       <button

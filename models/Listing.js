@@ -19,6 +19,10 @@ const listingSchema = new mongoose.Schema(
       type: String,
       default: "day",
     },
+    isNegotiable: {
+      type: Boolean,
+      default: true,
+    },
     hostel: {
       type: String,
       required: true,
@@ -60,11 +64,16 @@ const listingSchema = new mongoose.Schema(
     },
     ownerName: {
       type: String,
-      default: "Campus Admin",
+      default: "Campus Student",
+    },
+    sellerPhone: {
+      type: String,
+      default: "",
+      trim: true,
     },
     status: {
       type: String,
-      enum: ["available", "rented", "removed"],
+      enum: ["available", "rented", "lent", "sold", "removed"],
       default: "available",
     },
   },
