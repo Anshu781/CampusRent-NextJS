@@ -1,4 +1,3 @@
-
 import { NextResponse } from "next/server";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -17,6 +16,31 @@ const allowedTypes = {
   "image/webp": ".webp",
 };
 
+// GET: Fetch all buyer and rental requests for the admin page
+export async function GET(request) {
+  try {
+    await connectDB();
+    const { searchParams } = new URL(request.url);
+    const mode = searchParams.get("mode");
+    const status = searchParams.get("status");
+
+    const filter = {};
+    if (mode && mode !== "all") filter.mode = mode;
+    if (status && status !== "all") filter.status = status;
+
+    const requests = await Request.find(filter).sort({ createdAt: -1 });
+
+    return NextResponse.json({ requests }, { status: 200 });
+  } catch (error) {
+    console.error("Error fetching requests:", error);
+    return NextResponse.json(
+      { message: "Could not fetch requests." },
+      { status: 500 }
+    );
+  }
+}
+
+// POST: Submit a new rental or buy request (mandatorily with phone number)
 export async function POST(request) {
   let savedPhotoPath = null;
 
@@ -30,6 +54,8 @@ export async function POST(request) {
     const block = String(formData.get("block") || "").trim();
     const room = String(formData.get("room") || "").trim();
     const userId = String(formData.get("userId") || "").trim();
+    const userName = String(formData.get("userName") || "").trim();
+    const phone = String(formData.get("phone") || "").trim();
     const photo = formData.get("photo");
 
     if (
@@ -42,7 +68,14 @@ export async function POST(request) {
       !userId
     ) {
       return NextResponse.json(
-        { message: "Please fill in all required fields." },
+        { message: "Please fill in all required hostel and item fields." },
+        { status: 400 }
+      );
+    }
+
+    if (!phone || phone.length < 8) {
+      return NextResponse.json(
+        { message: "Please enter a valid contact phone number so our admin can reach you." },
         { status: 400 }
       );
     }
@@ -51,7 +84,7 @@ export async function POST(request) {
 
     if (mode === "rent" && (!photo || typeof photo.arrayBuffer !== "function")) {
       return NextResponse.json(
-        { message: "Please upload a photo for a rental request." },
+        { message: "Please upload an item / ID photo for rental verification." },
         { status: 400 }
       );
     }
@@ -94,18 +127,16 @@ export async function POST(request) {
       block,
       room,
       userId,
+      userName,
+      phone,
       photo: photoUrl,
+      status: "pending",
     });
 
     return NextResponse.json(
       {
-        message: "Request submitted successfully.",
-        request: {
-          id: newRequest._id.toString(),
-          mode: newRequest.mode,
-          itemName: newRequest.itemName,
-          photo: newRequest.photo,
-        },
+        message: "Request submitted! Our campus admin will verify your request and contact you at your phone number.",
+        request: newRequest,
       },
       { status: 201 }
     );
@@ -121,5 +152,54 @@ export async function POST(request) {
       { message: "Could not submit your request. Please try again." },
       { status: 500 }
     );
+  }
+}
+
+// PATCH: Admin updates request status (verify, contact, reject, etc.)
+export async function PATCH(request) {
+  try {
+    const body = await request.json();
+    const { id, status, adminNotes } = body;
+
+    if (!id) {
+      return NextResponse.json({ message: "Request ID is required." }, { status: 400 });
+    }
+
+    await connectDB();
+
+    const updateFields = {};
+    if (status) updateFields.status = status;
+    if (adminNotes !== undefined) updateFields.adminNotes = adminNotes;
+
+    const updated = await Request.findByIdAndUpdate(id, updateFields, { new: true });
+
+    if (!updated) {
+      return NextResponse.json({ message: "Request not found." }, { status: 404 });
+    }
+
+    return NextResponse.json({ message: "Request updated successfully.", request: updated });
+  } catch (error) {
+    console.error("Error updating request:", error);
+    return NextResponse.json({ message: "Could not update request." }, { status: 500 });
+  }
+}
+
+// DELETE: Admin removes a request
+export async function DELETE(request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+
+    if (!id) {
+      return NextResponse.json({ message: "Request ID is required." }, { status: 400 });
+    }
+
+    await connectDB();
+    await Request.findByIdAndDelete(id);
+
+    return NextResponse.json({ message: "Request deleted successfully." });
+  } catch (error) {
+    console.error("Error deleting request:", error);
+    return NextResponse.json({ message: "Could not delete request." }, { status: 500 });
   }
 }

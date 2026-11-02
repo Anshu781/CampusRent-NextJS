@@ -1,4 +1,3 @@
-
 import mongoose from "mongoose";
 
 const listingSchema = new mongoose.Schema(
@@ -16,17 +15,22 @@ const listingSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    period: {
+      type: String,
+      default: "day",
+    },
     hostel: {
       type: String,
       required: true,
+      default: "Kalam",
     },
     block: {
       type: String,
-      required: true,
+      default: "A",
     },
     room: {
       type: String,
-      required: true,
+      default: "",
     },
     note: {
       type: String,
@@ -34,12 +38,34 @@ const listingSchema = new mongoose.Schema(
     },
     photo: {
       type: String,
-      required: true,
+      default: "",
+    },
+    emoji: {
+      type: String,
+      default: "📦",
+    },
+    color: {
+      type: String,
+      default: "mint",
+    },
+    quantity: {
+      type: Number,
+      default: 1,
+      min: 0,
     },
     owner: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      required: false,
+    },
+    ownerName: {
+      type: String,
+      default: "Campus Admin",
+    },
+    status: {
+      type: String,
+      enum: ["available", "rented", "removed"],
+      default: "available",
     },
   },
   { timestamps: true }

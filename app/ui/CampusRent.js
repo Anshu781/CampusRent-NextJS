@@ -1,10 +1,11 @@
 
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   ArrowDownRight, ArrowRight, Search, SlidersHorizontal, MapPin,
-  ShieldCheck, Heart, Zap, Menu, X, PackageCheck, Coffee, Sparkles
+  ShieldCheck, Heart, Zap, Menu, X, PackageCheck, Coffee, Sparkles, Phone
 } from "lucide-react";
 import SmoothScroll from "./SmoothScroll";
 
@@ -60,7 +61,7 @@ const rawItems = [
   owner: x[5],
   hostel: x[6],
   block: x[7],
-  rating: "4.8",
+  quantity: 1,
   note: x[8]
 }));
 
@@ -155,10 +156,38 @@ const [requestOpen, setRequestOpen] = useState(false);
 const [requestItemData, setRequestItemData] = useState(null);
 const [requestMode, setRequestMode] = useState("rent");
 const [requestPhoto, setRequestPhoto] = useState(null);
+const [requestPhone, setRequestPhone] = useState("");
 const [requestHostel, setRequestHostel] = useState("Kalam");
 const [requestBlock, setRequestBlock] = useState("A");
 const [requestRoom, setRequestRoom] = useState("");
 const [requestLoading, setRequestLoading] = useState(false);
+const [dbCounts, setDbCounts] = useState({});
+
+useEffect(() => {
+  fetch("/api/listings")
+    .then((res) => res.json())
+    .then((data) => {
+      if (data.counts) setDbCounts(data.counts);
+      if (data.listings && data.listings.length > 0) {
+        const mapped = data.listings.map((item, idx) => ({
+          id: item._id || idx + 1,
+          name: item.name,
+          category: item.category,
+          price: item.price,
+          period: item.period || "day",
+          emoji: item.emoji || "📦",
+          color: item.color || "mint",
+          owner: item.ownerName || "Campus user",
+          hostel: item.hostel,
+          block: item.block,
+          note: item.note,
+          quantity: item.quantity || 1,
+        }));
+        setItems(mapped);
+      }
+    })
+    .catch((err) => console.error("Could not fetch DB listings:", err));
+}, []);
 
   const filtered = useMemo(() => items.filter((item) => {
     const q = search.toLowerCase();
@@ -203,6 +232,7 @@ function requestItem(item, mode = "rent") {
   setRequestItemData(item);
   setRequestMode(mode);
   setRequestPhoto(null);
+  setRequestPhone("");
   setRequestHostel(item.hostel || "Kalam");
   setRequestBlock(item.block || "A");
   setRequestRoom("");
@@ -261,8 +291,13 @@ async function submitRequest(e) {
     return;
   }
 
+  if (!requestPhone.trim() || requestPhone.trim().length < 8) {
+    showNotice("Please enter a valid phone number so admin can contact you.");
+    return;
+  }
+
   if (requestMode === "rent" && !requestPhoto) {
-    showNotice("Please upload one photo.");
+    showNotice("Please upload one item / ID photo for rental verification.");
     return;
   }
 
@@ -277,6 +312,8 @@ async function submitRequest(e) {
     formData.append("block", requestBlock);
     formData.append("room", requestRoom.trim());
     formData.append("userId", String(currentUser.id));
+    formData.append("userName", currentUser.name || "Student");
+    formData.append("phone", requestPhone.trim());
 
     if (requestPhoto) {
       formData.append("photo", requestPhoto);
@@ -295,9 +332,7 @@ async function submitRequest(e) {
 
     setRequestOpen(false);
     showNotice(
-      requestMode === "rent"
-        ? "Rental request submitted!"
-        : "Buy request submitted! Please complete payment using the QR code."
+      "Request submitted! Our campus admin will verify details and contact you via phone."
     );
   } catch (error) {
     showNotice(error.message || "Could not connect to the server.");
@@ -322,9 +357,29 @@ async function submitRequest(e) {
           <a href="#explore" onClick={() => setMenuOpen(false)}>Explore rentals</a>
           <a href="#how-it-works" onClick={() => setMenuOpen(false)}>How it works</a>
           <a href="#community" onClick={() => setMenuOpen(false)}>Our community</a>
+          <Link href="/admin" onClick={() => setMenuOpen(false)} style={{ color: "#243d26", fontWeight: 700 }}>
+            🛡️ Admin Desk
+          </Link>
         </nav>
 
         <div className="header-actions">
+          <Link
+            href="/admin"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              background: "#c8f169",
+              color: "#17251f",
+              padding: "7px 13px",
+              borderRadius: 20,
+              fontSize: 12,
+              fontWeight: 800,
+              textDecoration: "none",
+            }}
+          >
+            🛡️ Admin Desk
+          </Link>
           <button className="saved-link" onClick={() =>
             showNotice(saved.length
               ? `${saved.length} item(s) saved for later.`
@@ -555,7 +610,12 @@ async function submitRequest(e) {
                 <div className="product-info">
                   <div className="product-topline">
                     <span className="product-category">{item.category}</span>
-                    <span className="rating">★ {item.rating || "New"}</span>
+                    <span
+                      className="stock-badge"
+                      title="Stock count present in campus database"
+                    >
+                      📦 {dbCounts[item.name.toLowerCase().trim()] || item.quantity || 1} in DB
+                    </span>
                   </div>
                   <h3>{item.name}</h3>
                   <p className="product-note">{item.note}</p>
@@ -951,28 +1011,41 @@ async function submitRequest(e) {
                 </label>
               </div>
 
-              {requestMode === "buy" && (
-                <div style={{ textAlign: "center", margin: "16px 0" }}>
-                  <h3 style={{ marginBottom: 8 }}>Pay using PhonePe</h3>
-                  <p style={{ color: "#64748b", fontSize: 13 }}>
-                    Scan this QR code with your payment app.
-                  </p>
-                  <img
-                    src="/phonepe-qr.jpg"
-                    alt="PhonePe payment QR code"
-                    style={{
-                      width: 240,
-                      maxWidth: "100%",
-                      height: "auto",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: 12,
-                    }}
-                  />
-                  <p style={{ color: "#64748b", fontSize: 12 }}>
-                    Confirm the amount with the seller before paying.
-                  </p>
+              <label style={labelStyle}>
+                Contact phone number *
+                <input
+                  type="tel"
+                  required
+                  style={fieldStyle}
+                  value={requestPhone}
+                  onChange={(e) => setRequestPhone(e.target.value)}
+                  placeholder="e.g. 9876543210 (required for admin verification)"
+                  maxLength={15}
+                />
+              </label>
+
+              <div
+                style={{
+                  background: "#f0fdf4",
+                  border: "1px solid #bbf7d0",
+                  borderRadius: 8,
+                  padding: "12px 14px",
+                  fontSize: 12,
+                  color: "#166534",
+                  margin: "16px 0",
+                  lineHeight: 1.5,
+                  display: "flex",
+                  gap: 10,
+                  alignItems: "flex-start",
+                }}
+              >
+                <ShieldCheck size={18} style={{ flexShrink: 0, marginTop: 2 }} />
+                <div>
+                  <b>Campus Admin Intermediated Workflow:</b> Direct payment is disabled.
+                  All rental & buyer requests are reviewed by the campus admin team.
+                  We will contact you via your phone number to coordinate safe item handoff or inspection.
                 </div>
-              )}
+              </div>
 
               <button
                 className="button button-dark"

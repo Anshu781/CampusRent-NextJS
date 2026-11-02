@@ -1,4 +1,3 @@
-
 import mongoose from "mongoose";
 
 const requestSchema = new mongoose.Schema(
@@ -36,7 +35,25 @@ const requestSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    userName: {
+      type: String,
+      default: "",
+    },
+    phone: {
+      type: String,
+      required: [true, "Phone number is required for admin contact and verification"],
+      trim: true,
+    },
     photo: {
+      type: String,
+      default: "",
+    },
+    status: {
+      type: String,
+      enum: ["pending", "contacted", "verified", "rejected", "completed"],
+      default: "pending",
+    },
+    adminNotes: {
       type: String,
       default: "",
     },
