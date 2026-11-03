@@ -1,7 +1,4 @@
 import { NextResponse } from "next/server";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { randomUUID } from "node:crypto";
 import jwt from "jsonwebtoken";
 
 import connectDB from "../../../lib/mongodb";
@@ -70,53 +67,44 @@ export async function GET(request) {
 
 // POST: Submit a new rental or buy request (Public for students)
 export async function POST(request) {
-  let savedPhotoPath = null;
-
   try {
     const formData = await request.formData();
 
     const itemId = String(formData.get("itemId") || "").trim();
     const itemName = String(formData.get("itemName") || "").trim();
-    const mode = String(formData.get("mode") || "").trim();
-    const hostel = String(formData.get("hostel") || "").trim();
-    const block = String(formData.get("block") || "").trim();
+    const mode = String(formData.get("mode") || "rent").trim();
+    const hostel = String(formData.get("hostel") || "Kalam").trim();
+    const block = String(formData.get("block") || "A").trim() || "A";
     const room = String(formData.get("room") || "").trim();
-    const userId = String(formData.get("userId") || "").trim();
-    const userName = String(formData.get("userName") || "").trim();
+    const userId = String(formData.get("userId") || "").trim() || `user_${Date.now()}`;
+    const userName = String(formData.get("userName") || "").trim() || "Campus Student";
     const phone = String(formData.get("phone") || "").trim();
     const photo = formData.get("photo");
 
-    if (
-      !itemId ||
-      !itemName ||
-      !["rent", "buy"].includes(mode) ||
-      !hostel ||
-      !block ||
-      !room ||
-      !userId
-    ) {
+    if (!itemId || !itemName || !["rent", "buy"].includes(mode)) {
       return NextResponse.json(
-        { message: "Please fill in all required hostel and item fields." },
+        { message: "Please specify the item and whether you want to rent or buy." },
         { status: 400 }
       );
     }
 
-    if (!phone || phone.length < 8) {
+    if (!hostel || !room) {
       return NextResponse.json(
-        { message: "Please enter a valid contact phone number so our admin can reach you." },
+        { message: "Please provide your hostel and room number." },
+        { status: 400 }
+      );
+    }
+
+    if (!phone || phone.replace(/\D/g, "").length < 7) {
+      return NextResponse.json(
+        { message: "Please enter a valid contact phone number so our admin team can reach you." },
         { status: 400 }
       );
     }
 
     let photoUrl = "";
 
-    if (mode === "rent" && (!photo || typeof photo.arrayBuffer !== "function")) {
-      return NextResponse.json(
-        { message: "Please upload an item / ID photo for rental verification." },
-        { status: 400 }
-      );
-    }
-
+    // Photo is OPTIONAL. If provided, store as base64 Data URL to work cleanly on serverless runtimes
     if (photo && typeof photo.arrayBuffer === "function" && photo.size > 0) {
       if (!allowedTypes[photo.type]) {
         return NextResponse.json(
@@ -132,17 +120,8 @@ export async function POST(request) {
         );
       }
 
-      const uploadDir = path.join(process.cwd(), "public", "uploads");
-      await mkdir(uploadDir, { recursive: true });
-
-      const filename = `${randomUUID()}${allowedTypes[photo.type]}`;
-      const absolutePath = path.join(uploadDir, filename);
-
       const bytes = Buffer.from(await photo.arrayBuffer());
-      await writeFile(absolutePath, bytes);
-
-      savedPhotoPath = absolutePath;
-      photoUrl = `/uploads/${filename}`;
+      photoUrl = `data:${photo.type};base64,${bytes.toString("base64")}`;
     }
 
     await connectDB();
@@ -169,15 +148,10 @@ export async function POST(request) {
       { status: 201 }
     );
   } catch (error) {
-    if (savedPhotoPath) {
-      const { unlink } = await import("node:fs/promises");
-      await unlink(savedPhotoPath).catch(() => {});
-    }
-
     console.error("Request submission error:", error);
 
     return NextResponse.json(
-      { message: "Could not submit your request. Please try again." },
+      { message: error?.message || "Could not submit your request. Please try again." },
       { status: 500 }
     );
   }

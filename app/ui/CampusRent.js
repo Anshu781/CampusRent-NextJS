@@ -161,9 +161,19 @@ const [requestPhoto, setRequestPhoto] = useState(null);
 const [requestPhone, setRequestPhone] = useState("");
 const [requestHostel, setRequestHostel] = useState("Kalam");
 const [requestBlock, setRequestBlock] = useState("A");
-const [requestRoom, setRequestRoom] = useState("");
 const [requestLoading, setRequestLoading] = useState(false);
+const [requestError, setRequestError] = useState("");
+const [pendingRequest, setPendingRequest] = useState(null);
 const [dbCounts, setDbCounts] = useState({});
+
+useEffect(() => {
+  try {
+    const savedUser = localStorage.getItem("campusrent_user");
+    if (savedUser) {
+      setCurrentUser(JSON.parse(savedUser));
+    }
+  } catch (e) {}
+}, []);
 
 useEffect(() => {
   fetch("/api/listings")
@@ -224,8 +234,10 @@ useEffect(() => {
 
   
 function requestItem(item, mode = "rent") {
+  setRequestError("");
   if (!currentUser) {
-    showNotice("Please log in to continue.");
+    setPendingRequest({ item, mode });
+    showNotice("Please log in to continue with your request.");
     setAuthMode("login");
     setAuthOpen(true);
     return;
@@ -234,7 +246,7 @@ function requestItem(item, mode = "rent") {
   setRequestItemData(item);
   setRequestMode(mode);
   setRequestPhoto(null);
-  setRequestPhone("");
+  setRequestPhone(currentUser.phone || "");
   setRequestHostel(item.hostel || "Kalam");
   setRequestBlock(item.block || "A");
   setRequestRoom("");
@@ -318,6 +330,9 @@ async function submitListing(e) {
         });
       } else {
         setCurrentUser(data.user);
+        try {
+          localStorage.setItem("campusrent_user", JSON.stringify(data.user));
+        } catch (e) {}
         setAuthOpen(false);
         setAuthForm({ name: "", email: "", password: "" });
 
@@ -329,6 +344,18 @@ async function submitListing(e) {
           }, 600);
         } else {
           showNotice(`Welcome${data.user?.name ? `, ${data.user.name}` : ""}!`);
+          if (pendingRequest) {
+            setRequestItemData(pendingRequest.item);
+            setRequestMode(pendingRequest.mode);
+            setRequestPhoto(null);
+            setRequestPhone(data.user?.phone || "");
+            setRequestHostel(pendingRequest.item.hostel || "Kalam");
+            setRequestBlock(pendingRequest.item.block || "A");
+            setRequestRoom("");
+            setRequestError("");
+            setRequestOpen(true);
+            setPendingRequest(null);
+          }
         }
       }
     } catch (error) {
@@ -341,19 +368,26 @@ async function submitListing(e) {
   
 async function submitRequest(e) {
   e.preventDefault();
+  setRequestError("");
 
-  if (!currentUser || !requestItemData) {
-    showNotice("Please log in and select an item.");
+  if (!currentUser) {
+    setRequestError("Please log in before submitting a request.");
     return;
   }
 
-  if (!requestPhone.trim() || requestPhone.trim().length < 8) {
-    showNotice("Please enter a valid phone number so admin can contact you.");
+  if (!requestItemData) {
+    setRequestError("No item selected. Please choose an item from the marketplace.");
     return;
   }
 
-  if (requestMode === "rent" && !requestPhoto) {
-    showNotice("Please upload one item / ID photo for rental verification.");
+  const cleanPhone = requestPhone.trim().replace(/\D/g, "");
+  if (!cleanPhone || cleanPhone.length < 7) {
+    setRequestError("Please enter a valid phone number (at least 7 digits) so our admin team can contact you.");
+    return;
+  }
+
+  if (!requestRoom.trim()) {
+    setRequestError("Please enter your hostel room number.");
     return;
   }
 
@@ -364,10 +398,10 @@ async function submitRequest(e) {
     formData.append("itemId", String(requestItemData.id));
     formData.append("itemName", requestItemData.name);
     formData.append("mode", requestMode);
-    formData.append("hostel", requestHostel);
-    formData.append("block", requestBlock);
+    formData.append("hostel", requestHostel || "Kalam");
+    formData.append("block", requestBlock || "A");
     formData.append("room", requestRoom.trim());
-    formData.append("userId", String(currentUser.id));
+    formData.append("userId", String(currentUser.id || currentUser._id || currentUser.email || `user_${Date.now()}`));
     formData.append("userName", currentUser.name || "Student");
     formData.append("phone", requestPhone.trim());
 
@@ -388,9 +422,10 @@ async function submitRequest(e) {
 
     setRequestOpen(false);
     showNotice(
-      "Request submitted! Our campus admin will verify details and contact you via phone."
+      "✅ Request submitted! Our campus admin will verify details and contact you via phone."
     );
   } catch (error) {
+    setRequestError(error.message || "Could not connect to the server.");
     showNotice(error.message || "Could not connect to the server.");
   } finally {
     setRequestLoading(false);
@@ -450,6 +485,9 @@ async function submitRequest(e) {
                 className="button button-dark button-small"
                 onClick={() => {
                   setCurrentUser(null);
+                  try {
+                    localStorage.removeItem("campusrent_user");
+                  } catch (e) {}
                   sessionStorage.removeItem("campusrent_admin_token");
                   showNotice("Logged out.");
                 }}
@@ -1009,20 +1047,17 @@ async function submitRequest(e) {
             </div>
 
             <form onSubmit={submitRequest} style={{ marginTop: 24 }}>
-              {requestMode === "rent" && (
-                <label style={labelStyle}>
-                  Upload one photo *
-                  <input
-                    type="file"
-                    accept="image/*"
-                    required
-                    style={fieldStyle}
-                    onChange={(e) =>
-                      setRequestPhoto(e.target.files?.[0] || null)
-                    }
-                  />
-                </label>
-              )}
+              <label style={labelStyle}>
+                Item or Student ID photo (optional)
+                <input
+                  type="file"
+                  accept="image/*"
+                  style={fieldStyle}
+                  onChange={(e) =>
+                    setRequestPhoto(e.target.files?.[0] || null)
+                  }
+                />
+              </label>
 
               <label style={labelStyle}>
                 Hostel *
@@ -1060,8 +1095,8 @@ async function submitRequest(e) {
                     value={requestBlock}
                     onChange={(e) => setRequestBlock(e.target.value)}
                   >
-                    {["A", "B", "C", "D", "N/A"].map((x) => (
-                      <option key={x} value={x === "N/A" ? "" : x}>
+                    {["A", "B", "C", "D", "Main"].map((x) => (
+                      <option key={x} value={x}>
                         {x}
                       </option>
                     ))}
@@ -1138,6 +1173,27 @@ async function submitRequest(e) {
                 </div>
               </div>
 
+              {requestError && (
+                <div
+                  style={{
+                    background: "#fef2f2",
+                    border: "1px solid #fecaca",
+                    borderRadius: 8,
+                    padding: "10px 14px",
+                    fontSize: 13,
+                    color: "#b91c1c",
+                    margin: "12px 0",
+                    lineHeight: 1.4,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                >
+                  <span>⚠️</span>
+                  <span>{requestError}</span>
+                </div>
+              )}
+
               <button
                 className="button button-dark"
                 type="submit"
@@ -1146,10 +1202,11 @@ async function submitRequest(e) {
                   width: "100%",
                   justifyContent: "center",
                   opacity: requestLoading ? 0.7 : 1,
+                  cursor: requestLoading ? "not-allowed" : "pointer",
                 }}
               >
                 {requestLoading
-                  ? "Submitting..."
+                  ? "Submitting request to Admin..."
                   : requestMode === "rent"
                     ? "Submit rental request"
                     : "Submit buy request"}
