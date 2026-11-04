@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -158,9 +157,11 @@ const [requestOpen, setRequestOpen] = useState(false);
 const [requestItemData, setRequestItemData] = useState(null);
 const [requestMode, setRequestMode] = useState("rent");
 const [requestPhoto, setRequestPhoto] = useState(null);
+const [requestName, setRequestName] = useState("");
 const [requestPhone, setRequestPhone] = useState("");
 const [requestHostel, setRequestHostel] = useState("Kalam");
 const [requestBlock, setRequestBlock] = useState("A");
+const [requestRoom, setRequestRoom] = useState("");
 const [requestLoading, setRequestLoading] = useState(false);
 const [requestError, setRequestError] = useState("");
 const [pendingRequest, setPendingRequest] = useState(null);
@@ -235,18 +236,11 @@ useEffect(() => {
   
 function requestItem(item, mode = "rent") {
   setRequestError("");
-  if (!currentUser) {
-    setPendingRequest({ item, mode });
-    showNotice("Please log in to continue with your request.");
-    setAuthMode("login");
-    setAuthOpen(true);
-    return;
-  }
-
   setRequestItemData(item);
   setRequestMode(mode);
   setRequestPhoto(null);
-  setRequestPhone(currentUser.phone || "");
+  setRequestName(currentUser?.name || "");
+  setRequestPhone(currentUser?.phone || "");
   setRequestHostel(item.hostel || "Kalam");
   setRequestBlock(item.block || "A");
   setRequestRoom("");
@@ -370,13 +364,13 @@ async function submitRequest(e) {
   e.preventDefault();
   setRequestError("");
 
-  if (!currentUser) {
-    setRequestError("Please log in before submitting a request.");
+  if (!requestItemData) {
+    setRequestError("No item selected. Please choose an item from the marketplace.");
     return;
   }
 
-  if (!requestItemData) {
-    setRequestError("No item selected. Please choose an item from the marketplace.");
+  if (!requestName.trim()) {
+    setRequestError("Please enter your name.");
     return;
   }
 
@@ -401,8 +395,8 @@ async function submitRequest(e) {
     formData.append("hostel", requestHostel || "Kalam");
     formData.append("block", requestBlock || "A");
     formData.append("room", requestRoom.trim());
-    formData.append("userId", String(currentUser.id || currentUser._id || currentUser.email || `user_${Date.now()}`));
-    formData.append("userName", currentUser.name || "Student");
+    formData.append("userId", String(currentUser?.id || currentUser?._id || `user_${Date.now()}`));
+    formData.append("userName", requestName.trim() || currentUser?.name || "Campus Student");
     formData.append("phone", requestPhone.trim());
 
     if (requestPhoto) {
@@ -1047,6 +1041,18 @@ async function submitRequest(e) {
             </div>
 
             <form onSubmit={submitRequest} style={{ marginTop: 24 }}>
+              <label style={labelStyle}>
+                Your Full Name *
+                <input
+                  required
+                  style={fieldStyle}
+                  value={requestName}
+                  onChange={(e) => setRequestName(e.target.value)}
+                  placeholder="e.g. Rahul Sharma"
+                  maxLength={60}
+                />
+              </label>
+
               <label style={labelStyle}>
                 Item or Student ID photo (optional)
                 <input
