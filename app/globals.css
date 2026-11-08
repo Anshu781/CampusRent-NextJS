@@ -759,6 +759,8 @@ button {
 
 /* PRODUCT IMAGE: SMALL AND FULLY VISIBLE */
 
+/* PRODUCT IMAGE: ROUNDED AND FULLY VISIBLE */
+
 .product-visual img.product-photo {
   position: relative;
   z-index: 1;
@@ -771,6 +773,7 @@ button {
   object-position: center;
   padding: 22px;
   box-sizing: border-box;
+  border-radius: 14px;
 }
 
 /* PRODUCT DETAILS */
@@ -1469,9 +1472,10 @@ button {
     height: 155px;
   }
 
-  .product-visual img.product-photo {
-    padding: 18px;
-  }
+.product-visual img.product-photo {
+  padding: 18px;
+  border-radius: 12px;
+}
 
   .product-emoji {
     font-size: 56px;
