@@ -180,6 +180,11 @@ export default function CampusRent() {
     }
   }, []);
 
+  function showNotice(message) {
+    setNotice(message);
+    window.setTimeout(() => setNotice(""), 4500);
+  }
+
   async function refreshListings() {
     try {
       const response = await fetch("/api/listings");
@@ -190,7 +195,11 @@ export default function CampusRent() {
       }
 
       setDbCounts(data.counts || {});
-      setItems((data.listings || []).map(mapListing));
+      setItems(
+        Array.isArray(data.listings)
+          ? data.listings.map(mapListing)
+          : []
+      );
     } catch (error) {
       console.error("Could not fetch DB listings:", error);
       showNotice("Could not load marketplace listings. Please refresh.");
@@ -235,11 +244,6 @@ export default function CampusRent() {
     [items, search, category, location]
   );
 
-  function showNotice(message) {
-    setNotice(message);
-    window.setTimeout(() => setNotice(""), 4500);
-  }
-
   function toggleSaved(id) {
     setSaved((current) =>
       current.includes(id)
@@ -282,6 +286,15 @@ export default function CampusRent() {
 
     setListingPhoto(file);
     setListingPreview(URL.createObjectURL(file));
+  }
+
+  function removeListingPhoto() {
+    if (listingPreview) {
+      URL.revokeObjectURL(listingPreview);
+    }
+
+    setListingPhoto(null);
+    setListingPreview("");
   }
 
   function requestItem(item, mode = "rent") {
@@ -1661,7 +1674,7 @@ export default function CampusRent() {
                 }}
               >
                 <label style={labelStyle}>
-                  Product image
+                  Product image (optional)
                   <div
                     style={{
                       marginTop: 8,
@@ -1734,9 +1747,7 @@ export default function CampusRent() {
                   {listingPhoto && (
                     <button
                       type="button"
-                      onClick={() => {
-                        resetListingForm();
-                      }}
+                      onClick={removeListingPhoto}
                       style={{
                         border: "1px solid #fecaca",
                         background: "#fff",
