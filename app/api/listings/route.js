@@ -1,24 +1,71 @@
+
 import { NextResponse } from "next/server";
 import connectDB from "../../../lib/mongodb.js";
 import Listing from "../../../models/Listing.js";
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
+import { v2 as cloudinary } from "cloudinary";
 
-const initialSeedItems = [
-  { name: "Cycle", category: "Mobility", price: 60, period: "day", emoji: "🚲", color: "blue", ownerName: "Sana", sellerName: "Sana", sellerPhone: "9876543214", hostel: "Kalam", block: "D", room: "204", note: "Lock included · good brakes", quantity: 1, isNegotiable: true, createdAt: new Date(Date.now() - 86400000 * 3) },
-  { name: "Cycle", category: "Mobility", price: 50, period: "day", emoji: "🚲", color: "blue", ownerName: "Rohit", sellerName: "Rohit", sellerPhone: "9876543225", hostel: "Aryabhatta", block: "B", room: "112", note: "Geared mountain cycle", quantity: 1, isNegotiable: true, createdAt: new Date(Date.now() - 86400000 * 2) },
-  { name: "Electric kettle", category: "Appliances", price: 25, period: "day", emoji: "🫖", color: "peach", ownerName: "Aarav", sellerName: "Aarav", sellerPhone: "9876543210", hostel: "Kalam", block: "B", room: "305", note: "1.5L · auto shut-off", quantity: 2, isNegotiable: true, createdAt: new Date(Date.now() - 86400000 * 4) },
-  { name: "Electric kettle", category: "Appliances", price: 20, period: "day", emoji: "🫖", color: "peach", ownerName: "Priya", sellerName: "Priya", sellerPhone: "9876543211", hostel: "Ashima", block: "A", room: "102", note: "Pigeon electric kettle 1.2L", quantity: 1, isNegotiable: true, createdAt: new Date(Date.now() - 86400000 * 1) },
-  { name: "Steam iron", category: "Appliances", price: 20, period: "day", emoji: "👔", color: "lavender", ownerName: "Mehak", sellerName: "Mehak", sellerPhone: "9876543212", hostel: "Aryabhatta", block: "C", room: "219", note: "Quick heat · non-stick soleplate", quantity: 2, isNegotiable: true, createdAt: new Date(Date.now() - 86400000 * 5) },
-  { name: "Scientific calculator", category: "Study", price: 15, period: "day", emoji: "🧮", color: "mint", ownerName: "Rishabh", sellerName: "Rishabh", sellerPhone: "9876543213", hostel: "CV Raman", block: "A", room: "401", note: "Casio fx-991EX · exam approved", quantity: 3, isNegotiable: true, createdAt: new Date(Date.now() - 86400000 * 6) },
-  { name: "Desk lamp", category: "Study", price: 12, period: "day", emoji: "💡", color: "yellow", ownerName: "Kabir", sellerName: "Kabir", sellerPhone: "9876543215", hostel: "Aryabhatta", block: "A", room: "108", note: "Warm + cool light with USB", quantity: 2, isNegotiable: true, createdAt: new Date(Date.now() - 86400000 * 2) },
-  { name: "Bluetooth speaker", category: "Electronics", price: 35, period: "day", emoji: "🔊", color: "pink", ownerName: "Ira", sellerName: "Ira", sellerPhone: "9876543216", hostel: "Ashima", block: "B", room: "201", note: "boAt stone · great bass", quantity: 1, isNegotiable: true, createdAt: new Date(Date.now() - 86400000 * 3) },
-  { name: "Extension board", category: "Appliances", price: 10, period: "day", emoji: "🔌", color: "mint", ownerName: "Dev", sellerName: "Dev", sellerPhone: "9876543217", hostel: "Married Accommodation", block: "A", room: "12", note: "4 sockets · 2m cable surge protect", quantity: 4, isNegotiable: true, createdAt: new Date(Date.now() - 86400000 * 7) },
-  { name: "Badminton set", category: "Sports", price: 30, period: "day", emoji: "🏸", color: "peach", ownerName: "Ananya", sellerName: "Ananya", sellerPhone: "9876543218", hostel: "Kalam", block: "A", room: "310", note: "Yonex 2 rackets + 3 shuttles", quantity: 2, isNegotiable: true, createdAt: new Date(Date.now() - 86400000 * 4) },
-  { name: "Study table", category: "Furniture", price: 45, period: "day", emoji: "🪑", color: "yellow", ownerName: "Riya", sellerName: "Riya", sellerPhone: "9876543219", hostel: "Aryabhatta", block: "B", room: "220", note: "Foldable wooden study desk", quantity: 1, isNegotiable: true, createdAt: new Date(Date.now() - 86400000 * 8) },
-  { name: "Room fan", category: "Appliances", price: 30, period: "day", emoji: "🌀", color: "mint", ownerName: "Diya", sellerName: "Diya", sellerPhone: "9876543220", hostel: "Kalam", block: "C", room: "105", note: "High speed table fan", quantity: 2, isNegotiable: true, createdAt: new Date(Date.now() - 86400000 * 3) },
-  { name: "Mini refrigerator", category: "Appliances", price: 100, period: "day", emoji: "🧊", color: "blue", ownerName: "Nikhil", sellerName: "Nikhil", sellerPhone: "9876543221", hostel: "Aryabhatta", block: "D", room: "315", note: "Compact 45L fridge in good cooling condition", quantity: 1, isNegotiable: true, createdAt: new Date(Date.now() - 86400000 * 9) },
-];
+export const runtime = "nodejs";
+
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+
+function configureCloudinary() {
+  const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } =
+    process.env;
+
+  if (
+    !CLOUDINARY_CLOUD_NAME ||
+    !CLOUDINARY_API_KEY ||
+    !CLOUDINARY_API_SECRET
+  ) {
+    throw new Error("Cloudinary environment variables are not configured.");
+  }
+
+  cloudinary.config({
+    cloud_name: CLOUDINARY_CLOUD_NAME,
+    api_key: CLOUDINARY_API_KEY,
+    api_secret: CLOUDINARY_API_SECRET,
+    secure: true,
+  });
+}
+
+async function uploadImage(file) {
+  if (!file || file.size === 0) {
+    return "";
+  }
+
+  if (!file.type?.startsWith("image/")) {
+    throw new Error("Please upload a valid image file.");
+  }
+
+  if (file.size > MAX_IMAGE_SIZE) {
+    throw new Error("Image size must not exceed 5 MB.");
+  }
+
+  configureCloudinary();
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  return new Promise((resolve, reject) => {
+    cloudinary.uploader
+      .upload_stream(
+        {
+          folder: "campusrent/listings",
+          resource_type: "image",
+        },
+        (error, result) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+
+          resolve(result.secure_url);
+        }
+      )
+      .end(buffer);
+  });
+}
 
 function verifyAdmin(request) {
   const token =
@@ -26,30 +73,31 @@ function verifyAdmin(request) {
     request.headers.get("authorization")?.replace("Bearer ", "");
 
   if (!token) return false;
-  if (token === (process.env.ADMIN_SECRET || "campusadmin123")) return true;
+
+  if (token === process.env.ADMIN_SECRET) return true;
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "campusrent_jwt_secret");
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET || "campusrent_jwt_secret"
+    );
+
     return decoded && decoded.role === "admin";
   } catch {
     return false;
   }
 }
 
-// GET: Fetch all database listings, counts, and FCFS seller queues
+// GET: Fetch database listings, counts, and FCFS seller queues
 export async function GET() {
   try {
     await connectDB();
 
-    let listings = await Listing.find({ status: { $ne: "removed" } }).sort({ createdAt: 1 });
+    // No automatic dummy listing insertion.
+    const listings = await Listing.find({
+      status: { $ne: "removed" },
+    }).sort({ createdAt: 1 });
 
-    // Auto-seed if database is completely fresh
-    if (listings.length === 0) {
-      await Listing.insertMany(initialSeedItems);
-      listings = await Listing.find({ status: { $ne: "removed" } }).sort({ createdAt: 1 });
-    }
-
-    // Real database counts (sum of quantities of available items)
     const counts = {};
     const fcfsSellers = {};
 
@@ -61,14 +109,13 @@ export async function GET() {
         counts[key] = (counts[key] || 0) + item.quantity;
       }
 
-      // Group sellers in First-Come, First-Served (FCFS) order
       if (!fcfsSellers[properName]) {
         fcfsSellers[properName] = [];
       }
 
       fcfsSellers[properName].push({
         id: item._id.toString(),
-        sellerName: item.sellerName || item.ownerName || "Student Seller",
+        sellerName: item.ownerName || "Student Seller",
         sellerPhone: item.sellerPhone || "Contact via Admin",
         hostel: item.hostel,
         block: item.block,
@@ -86,133 +133,309 @@ export async function GET() {
       listings,
       counts,
       fcfsSellers,
-      totalCount: listings.reduce((sum, item) => sum + (item.quantity || 0), 0),
+      totalCount: listings.reduce(
+        (sum, item) => sum + (item.quantity || 0),
+        0
+      ),
     });
   } catch (error) {
     console.error("Error fetching listings:", error);
+
     return NextResponse.json(
-      { message: "Could not fetch database listings.", listings: [], counts: {}, fcfsSellers: {} },
+      {
+        message: "Could not fetch database listings.",
+        listings: [],
+        counts: {},
+        fcfsSellers: {},
+      },
       { status: 500 }
     );
   }
 }
 
-// POST: Add a new rental/lending listing (by student seller or admin)
+// POST: Create listing and upload its image to Cloudinary
 export async function POST(request) {
   try {
-    const body = await request.json();
+    const formData = await request.formData();
 
-    const {
-      name,
-      category,
-      price,
-      period,
-      hostel,
-      block,
-      room,
-      note,
-      photo,
-      emoji,
-      color,
-      quantity,
-      owner,
-      ownerName,
-      sellerName,
-      sellerPhone,
-    } = body;
+    const name = formData.get("name");
+    const category = formData.get("category");
+    const price = formData.get("price");
+    const period = formData.get("period");
+    const hostel = formData.get("hostel");
+    const block = formData.get("block");
+    const room = formData.get("room");
+    const note = formData.get("note");
+    const emoji = formData.get("emoji");
+    const color = formData.get("color");
+    const quantity = formData.get("quantity");
+    const owner = formData.get("owner");
+    const ownerName = formData.get("ownerName");
+    const sellerName = formData.get("sellerName");
+    const sellerPhone = formData.get("sellerPhone");
 
-    if (!name?.trim()) {
+    const imageFile = formData.get("photo");
+
+    if (typeof name !== "string" || !name.trim()) {
       return NextResponse.json(
         { message: "Product name is required." },
         { status: 400 }
       );
     }
 
+    if (
+      imageFile &&
+      typeof imageFile !== "string" &&
+      imageFile.size > 0 &&
+      !imageFile.type?.startsWith("image/")
+    ) {
+      return NextResponse.json(
+        { message: "Please upload a valid image file." },
+        { status: 400 }
+      );
+    }
+
+    if (
+      imageFile &&
+      typeof imageFile !== "string" &&
+      imageFile.size > MAX_IMAGE_SIZE
+    ) {
+      return NextResponse.json(
+        { message: "Image size must not exceed 5 MB." },
+        { status: 400 }
+      );
+    }
+
+    const numericPrice = Number(price || 0);
+    const numericQuantity = Number(quantity || 1);
+
+    if (!Number.isFinite(numericPrice) || numericPrice < 0) {
+      return NextResponse.json(
+        { message: "Please enter a valid product price." },
+        { status: 400 }
+      );
+    }
+
+    if (
+      !Number.isInteger(numericQuantity) ||
+      numericQuantity < 1
+    ) {
+      return NextResponse.json(
+        { message: "Quantity must be at least 1." },
+        { status: 400 }
+      );
+    }
+
     await connectDB();
+
+    let photoUrl = "";
+
+    if (imageFile && typeof imageFile !== "string" && imageFile.size > 0) {
+      photoUrl = await uploadImage(imageFile);
+    }
+
+    const resolvedOwnerName =
+      (typeof ownerName === "string" && ownerName.trim()) ||
+      (typeof sellerName === "string" && sellerName.trim()) ||
+      "Campus Student";
 
     const listing = await Listing.create({
       name: name.trim(),
-      category: category || "Other",
-      price: Number(price) || 0,
-      period: period || "day",
-      hostel: hostel?.trim() || "Kalam",
-      block: block?.trim() || "A",
-      room: room?.trim() || "",
-      note: note || "",
-      photo: photo || "",
-      emoji: emoji || "📦",
-      color: color || "mint",
-      quantity: Number(quantity) > 0 ? Number(quantity) : 1,
-      owner: owner && mongoose.Types.ObjectId.isValid(owner) ? owner : undefined,
-      ownerName: ownerName?.trim() || sellerName?.trim() || "Campus Student",
-      sellerName: sellerName?.trim() || ownerName?.trim() || "Campus Student",
-      sellerPhone: sellerPhone?.trim() || "",
+      category:
+        typeof category === "string" && category.trim()
+          ? category.trim()
+          : "Other",
+      price: numericPrice,
+      period:
+        typeof period === "string" && period.trim()
+          ? period.trim()
+          : "day",
+      hostel:
+        typeof hostel === "string" && hostel.trim()
+          ? hostel.trim()
+          : "Kalam",
+      block:
+        typeof block === "string" && block.trim()
+          ? block.trim()
+          : "A",
+      room: typeof room === "string" ? room.trim() : "",
+      note: typeof note === "string" ? note.trim() : "",
+      photo: photoUrl,
+      emoji:
+        typeof emoji === "string" && emoji.trim()
+          ? emoji
+          : "📦",
+      color:
+        typeof color === "string" && color.trim()
+          ? color
+          : "mint",
+      quantity: numericQuantity,
+      owner:
+        typeof owner === "string" && mongoose.Types.ObjectId.isValid(owner)
+          ? owner
+          : undefined,
+      ownerName: resolvedOwnerName,
+      sellerPhone:
+        typeof sellerPhone === "string" ? sellerPhone.trim() : "",
       isNegotiable: true,
       status: "available",
     });
 
     return NextResponse.json(
-      { message: "Listing added to database and placed in FCFS seller queue!", listing },
+      {
+        message: "Listing created successfully!",
+        listing,
+      },
       { status: 201 }
     );
   } catch (error) {
     console.error("Listing creation error:", error);
 
+    const isClientError =
+      error.message === "Please upload a valid image file." ||
+      error.message === "Image size must not exceed 5 MB.";
+
     return NextResponse.json(
-      { message: "Could not add product to database." },
-      { status: 500 }
+      {
+        message: isClientError
+          ? error.message
+          : "Could not add product to database. Please try again.",
+      },
+      { status: isClientError ? 400 : 500 }
     );
   }
 }
 
-// PATCH: Update listing (e.g. mark as lent, update quantity, etc.)
+// PATCH: Update listing (admin only)
 export async function PATCH(request) {
   if (!verifyAdmin(request)) {
-    return NextResponse.json({ message: "Admin authorization required." }, { status: 401 });
+    return NextResponse.json(
+      { message: "Admin authorization required." },
+      { status: 401 }
+    );
   }
 
   try {
     const body = await request.json();
     const { id, status, quantity } = body;
 
-    if (!id) {
-      return NextResponse.json({ message: "Listing ID is required." }, { status: 400 });
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return NextResponse.json(
+        { message: "A valid listing ID is required." },
+        { status: 400 }
+      );
+    }
+
+    const updateFields = {};
+
+    if (status) {
+      const allowedStatuses = [
+        "available",
+        "rented",
+        "lent",
+        "sold",
+        "removed",
+      ];
+
+      if (!allowedStatuses.includes(status)) {
+        return NextResponse.json(
+          { message: "Invalid listing status." },
+          { status: 400 }
+        );
+      }
+
+      updateFields.status = status;
+    }
+
+    if (quantity !== undefined) {
+      const parsedQuantity = Number(quantity);
+
+      if (!Number.isInteger(parsedQuantity) || parsedQuantity < 0) {
+        return NextResponse.json(
+          { message: "Invalid quantity." },
+          { status: 400 }
+        );
+      }
+
+      updateFields.quantity = parsedQuantity;
+    }
+
+    if (Object.keys(updateFields).length === 0) {
+      return NextResponse.json(
+        { message: "No valid update fields provided." },
+        { status: 400 }
+      );
     }
 
     await connectDB();
-    const updateFields = {};
-    if (status) updateFields.status = status;
-    if (quantity !== undefined) updateFields.quantity = Number(quantity);
 
-    const updated = await Listing.findByIdAndUpdate(id, updateFields, { new: true });
+    const updated = await Listing.findByIdAndUpdate(
+      id,
+      updateFields,
+      { new: true, runValidators: true }
+    );
 
-    return NextResponse.json({ message: "Listing updated successfully.", listing: updated });
+    if (!updated) {
+      return NextResponse.json(
+        { message: "Listing not found." },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      message: "Listing updated successfully.",
+      listing: updated,
+    });
   } catch (error) {
     console.error("Error updating listing:", error);
-    return NextResponse.json({ message: "Could not update listing." }, { status: 500 });
+
+    return NextResponse.json(
+      { message: "Could not update listing." },
+      { status: 500 }
+    );
   }
 }
 
-// DELETE: Remove product from database
+// DELETE: Remove product (admin only)
 export async function DELETE(request) {
   if (!verifyAdmin(request)) {
-    return NextResponse.json({ message: "Admin authorization required." }, { status: 401 });
+    return NextResponse.json(
+      { message: "Admin authorization required." },
+      { status: 401 }
+    );
   }
 
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 
-    if (!id) {
-      return NextResponse.json({ message: "Product ID is required." }, { status: 400 });
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return NextResponse.json(
+        { message: "A valid product ID is required." },
+        { status: 400 }
+      );
     }
 
     await connectDB();
-    await Listing.findByIdAndDelete(id);
 
-    return NextResponse.json({ message: "Product removed from database listings." });
+    const deleted = await Listing.findByIdAndDelete(id);
+
+    if (!deleted) {
+      return NextResponse.json(
+        { message: "Listing not found." },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      message: "Product removed from database listings.",
+    });
   } catch (error) {
     console.error("Error deleting listing:", error);
-    return NextResponse.json({ message: "Could not remove product." }, { status: 500 });
+
+    return NextResponse.json(
+      { message: "Could not remove product." },
+      { status: 500 }
+    );
   }
 }
