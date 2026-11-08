@@ -69,7 +69,7 @@ export default function LoginPage() {
         {message && <p style={styles.message}>{message}</p>}
 
         <p style={styles.footer}>
-          Don't have an account? <Link href="/signup">Sign up</Link>
+          Don&apos;t have an account? <Link href="/signup">Sign up</Link>
         </p>
 
         <Link href="/" style={styles.back}>Back to Home</Link>

@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowDownRight,
@@ -166,12 +166,14 @@ export default function CampusRent() {
   const [requestLoading, setRequestLoading] = useState(false);
   const [requestError, setRequestError] = useState("");
   const [pendingRequest, setPendingRequest] = useState(null);
+
   const [dbCounts, setDbCounts] = useState({});
   const [listingsLoading, setListingsLoading] = useState(true);
 
   useEffect(() => {
     try {
       const savedUser = localStorage.getItem("campusrent_user");
+
       if (savedUser) {
         setCurrentUser(JSON.parse(savedUser));
       }
@@ -180,12 +182,12 @@ export default function CampusRent() {
     }
   }, []);
 
-  function showNotice(message) {
+  const showNotice = useCallback((message) => {
     setNotice(message);
     window.setTimeout(() => setNotice(""), 4500);
-  }
+  }, []);
 
-  async function refreshListings() {
+  const refreshListings = useCallback(async () => {
     try {
       const response = await fetch("/api/listings");
       const data = await response.json();
@@ -195,6 +197,7 @@ export default function CampusRent() {
       }
 
       setDbCounts(data.counts || {});
+
       setItems(
         Array.isArray(data.listings)
           ? data.listings.map(mapListing)
@@ -206,11 +209,11 @@ export default function CampusRent() {
     } finally {
       setListingsLoading(false);
     }
-  }
+  }, [showNotice]);
 
   useEffect(() => {
     refreshListings();
-  }, []);
+  }, [refreshListings]);
 
   useEffect(() => {
     return () => {
@@ -398,6 +401,7 @@ export default function CampusRent() {
       if (authMode === "signup") {
         showNotice("Account created! Please log in.");
         setAuthMode("login");
+
         setAuthForm({
           name: "",
           email: authForm.email,
@@ -486,14 +490,17 @@ export default function CampusRent() {
       formData.append("hostel", requestHostel || "Kalam");
       formData.append("block", requestBlock || "A");
       formData.append("room", requestRoom.trim());
+
       formData.append(
         "userId",
         String(currentUser?.id || currentUser?._id || `user_${Date.now()}`)
       );
+
       formData.append(
         "userName",
         requestName.trim() || currentUser?.name || "Campus Student"
       );
+
       formData.append("phone", requestPhone.trim());
 
       if (requestPhoto) {
@@ -512,6 +519,7 @@ export default function CampusRent() {
       }
 
       setRequestOpen(false);
+
       showNotice(
         "Request submitted! Our campus admin will verify details and contact you."
       );
@@ -593,7 +601,7 @@ export default function CampusRent() {
 
                   try {
                     localStorage.removeItem("campusrent_user");
-                  } catch (error) {}
+                  } catch {}
 
                   sessionStorage.removeItem("campusrent_admin_token");
                   showNotice("Logged out.");
@@ -790,7 +798,11 @@ export default function CampusRent() {
             </button>
           </div>
 
-          <div className="category-row" role="group" aria-label="Filter by category">
+          <div
+            className="category-row"
+            role="group"
+            aria-label="Filter by category"
+          >
             {categories.map((cat) => (
               <button
                 key={cat}
@@ -1014,7 +1026,7 @@ export default function CampusRent() {
               <h2>
                 Three steps.
                 <br />
-                <span>That's it.</span>
+                <span>That&apos;s it.</span>
               </h2>
               <p>
                 Good things are already on campus. They just need to find you.
@@ -1083,7 +1095,7 @@ export default function CampusRent() {
                 <span>Do more.</span>
               </h2>
               <p>
-                Why buy something you'll use twice? Keep useful things moving
+                Why buy something you&apos;ll use twice? Keep useful things moving
                 around campus—and keep a little more money in your pocket.
               </p>
 
