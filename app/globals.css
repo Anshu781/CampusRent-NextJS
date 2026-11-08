@@ -1621,3 +1621,28 @@ button {
     transition-duration: .01ms !important;
   }
 }
+/* FORCE FULL IMAGE VISIBILITY */
+.product-visual img.product-photo {
+  position: relative !important;
+  display: block !important;
+
+  width: 100% !important;
+  height: 100% !important;
+
+  max-width: 100% !important;
+  max-height: 100% !important;
+
+  object-fit: contain !important;
+  object-position: center !important;
+
+  padding: 12px !important;
+  box-sizing: border-box !important;
+}
+
+/* Image container */
+.product-visual {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+}
