@@ -17,11 +17,11 @@ function configureCloudinary() {
     CLOUDINARY_API_SECRET,
   } = process.env;
 
-  console.log("Cloudinary Environment Check:", {
-    cloudName: !!CLOUDINARY_CLOUD_NAME,
-    apiKey: !!CLOUDINARY_API_KEY,
-    apiSecret: !!CLOUDINARY_API_SECRET,
-  });
+ console.log("CLOUDINARY CHECK:", {
+  cloudName: process.env.CLOUDINARY_CLOUD_NAME ? "FOUND" : "MISSING",
+  apiKey: process.env.CLOUDINARY_API_KEY ? "FOUND" : "MISSING",
+  apiSecret: process.env.CLOUDINARY_API_SECRET ? "FOUND" : "MISSING",
+});
 
   if (
     !CLOUDINARY_CLOUD_NAME ||
