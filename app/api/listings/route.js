@@ -11,15 +11,20 @@ export const runtime = "nodejs";
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
 function configureCloudinary() {
-  const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } =
-    process.env;
+  const {
+    CLOUDINARY_CLOUD_NAME,
+    CLOUDINARY_API_KEY,
+    CLOUDINARY_API_SECRET,
+  } = process.env;
 
   if (
     !CLOUDINARY_CLOUD_NAME ||
     !CLOUDINARY_API_KEY ||
     !CLOUDINARY_API_SECRET
   ) {
-    throw new Error("Cloudinary environment variables are not configured.");
+    throw new Error(
+      "Cloudinary environment variables are not configured."
+    );
   }
 
   cloudinary.config({
@@ -60,6 +65,11 @@ async function uploadImage(file) {
             return;
           }
 
+          if (!result?.secure_url) {
+            reject(new Error("Cloudinary did not return an image URL."));
+            return;
+          }
+
           resolve(result.secure_url);
         }
       )
@@ -74,7 +84,12 @@ function verifyAdmin(request) {
 
   if (!token) return false;
 
-  if (token === process.env.ADMIN_SECRET) return true;
+  if (
+    process.env.ADMIN_SECRET &&
+    token === process.env.ADMIN_SECRET
+  ) {
+    return true;
+  }
 
   try {
     const decoded = jwt.verify(
@@ -88,12 +103,11 @@ function verifyAdmin(request) {
   }
 }
 
-// GET: Fetch database listings, counts, and FCFS seller queues
+// GET: Fetch listings
 export async function GET() {
   try {
     await connectDB();
 
-    // No automatic dummy listing insertion.
     const listings = await Listing.find({
       status: { $ne: "removed" },
     }).sort({ createdAt: 1 });
@@ -144,16 +158,13 @@ export async function GET() {
     return NextResponse.json(
       {
         message: "Could not fetch database listings.",
-        listings: [],
-        counts: {},
-        fcfsSellers: {},
       },
       { status: 500 }
     );
   }
 }
 
-// POST: Create listing and upload its image to Cloudinary
+// POST: Create listing and upload image
 export async function POST(request) {
   try {
     const formData = await request.formData();
@@ -176,6 +187,7 @@ export async function POST(request) {
 
     const imageFile = formData.get("photo");
 
+    // Validate product name
     if (typeof name !== "string" || !name.trim()) {
       return NextResponse.json(
         { message: "Product name is required." },
@@ -183,6 +195,7 @@ export async function POST(request) {
       );
     }
 
+    // Validate image
     if (
       imageFile &&
       typeof imageFile !== "string" &&
@@ -206,6 +219,7 @@ export async function POST(request) {
       );
     }
 
+    // Validate price and quantity
     const numericPrice = Number(price || 0);
     const numericQuantity = Number(quantity || 1);
 
@@ -226,11 +240,17 @@ export async function POST(request) {
       );
     }
 
+    // Connect MongoDB
     await connectDB();
 
+    // Upload image
     let photoUrl = "";
 
-    if (imageFile && typeof imageFile !== "string" && imageFile.size > 0) {
+    if (
+      imageFile &&
+      typeof imageFile !== "string" &&
+      imageFile.size > 0
+    ) {
       photoUrl = await uploadImage(imageFile);
     }
 
@@ -239,44 +259,63 @@ export async function POST(request) {
       (typeof sellerName === "string" && sellerName.trim()) ||
       "Campus Student";
 
+    // Save listing
     const listing = await Listing.create({
       name: name.trim(),
+
       category:
         typeof category === "string" && category.trim()
           ? category.trim()
           : "Other",
+
       price: numericPrice,
+
       period:
         typeof period === "string" && period.trim()
           ? period.trim()
           : "day",
+
       hostel:
         typeof hostel === "string" && hostel.trim()
           ? hostel.trim()
           : "Kalam",
+
       block:
         typeof block === "string" && block.trim()
           ? block.trim()
           : "A",
+
       room: typeof room === "string" ? room.trim() : "",
+
       note: typeof note === "string" ? note.trim() : "",
+
       photo: photoUrl,
+
       emoji:
         typeof emoji === "string" && emoji.trim()
           ? emoji
           : "📦",
+
       color:
         typeof color === "string" && color.trim()
           ? color
           : "mint",
+
       quantity: numericQuantity,
+
       owner:
-        typeof owner === "string" && mongoose.Types.ObjectId.isValid(owner)
+        typeof owner === "string" &&
+        mongoose.Types.ObjectId.isValid(owner)
           ? owner
           : undefined,
+
       ownerName: resolvedOwnerName,
+
       sellerPhone:
-        typeof sellerPhone === "string" ? sellerPhone.trim() : "",
+        typeof sellerPhone === "string"
+          ? sellerPhone.trim()
+          : "",
+
       isNegotiable: true,
       status: "available",
     });
@@ -288,20 +327,18 @@ export async function POST(request) {
       },
       { status: 201 }
     );
-  } catch (error) {
-    console.error("Listing creation error:", error);
 
-    const isClientError =
-      error.message === "Please upload a valid image file." ||
-      error.message === "Image size must not exceed 5 MB.";
+  } catch (error) {
+    // IMPORTANT: Check Vercel Runtime Logs for this error.
+    console.error("Listing creation error:", error);
 
     return NextResponse.json(
       {
-        message: isClientError
-          ? error.message
-          : "Could not add product to database. Please try again.",
+        message: "Could not add product to database.",
+        error: error.message || "Unknown server error",
+        errorName: error.name || "Error",
       },
-      { status: isClientError ? 400 : 500 }
+      { status: 500 }
     );
   }
 }
@@ -317,6 +354,7 @@ export async function PATCH(request) {
 
   try {
     const body = await request.json();
+
     const { id, status, quantity } = body;
 
     if (!id || !mongoose.Types.ObjectId.isValid(id)) {
@@ -350,7 +388,10 @@ export async function PATCH(request) {
     if (quantity !== undefined) {
       const parsedQuantity = Number(quantity);
 
-      if (!Number.isInteger(parsedQuantity) || parsedQuantity < 0) {
+      if (
+        !Number.isInteger(parsedQuantity) ||
+        parsedQuantity < 0
+      ) {
         return NextResponse.json(
           { message: "Invalid quantity." },
           { status: 400 }
@@ -386,6 +427,7 @@ export async function PATCH(request) {
       message: "Listing updated successfully.",
       listing: updated,
     });
+
   } catch (error) {
     console.error("Error updating listing:", error);
 
@@ -430,6 +472,7 @@ export async function DELETE(request) {
     return NextResponse.json({
       message: "Product removed from database listings.",
     });
+
   } catch (error) {
     console.error("Error deleting listing:", error);
 
