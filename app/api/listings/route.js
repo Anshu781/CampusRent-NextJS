@@ -4,42 +4,18 @@ import connectDB from "../../../lib/mongodb.js";
 import Listing from "../../../models/Listing.js";
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
-import { v2 as cloudinary } from "cloudinary";
+import { randomUUID } from "node:crypto";
+import { getSupabaseAdmin } from "../../../lib/supabaseAdmin.js";
 
 export const runtime = "nodejs";
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const BUCKET_NAME = "listings";
 
-function configureCloudinary() {
-  const {
-    CLOUDINARY_CLOUD_NAME,
-    CLOUDINARY_API_KEY,
-    CLOUDINARY_API_SECRET,
-  } = process.env;
-
- console.log("CLOUDINARY CHECK:", {
-  cloudName: process.env.CLOUDINARY_CLOUD_NAME ? "FOUND" : "MISSING",
-  apiKey: process.env.CLOUDINARY_API_KEY ? "FOUND" : "MISSING",
-  apiSecret: process.env.CLOUDINARY_API_SECRET ? "FOUND" : "MISSING",
-});
-
-  if (
-    !CLOUDINARY_CLOUD_NAME ||
-    !CLOUDINARY_API_KEY ||
-    !CLOUDINARY_API_SECRET
-  ) {
-    throw new Error(
-      "Cloudinary environment variables are not configured."
-    );
-  }
-
-  cloudinary.config({
-    cloud_name: CLOUDINARY_CLOUD_NAME,
-    api_key: CLOUDINARY_API_KEY,
-    api_secret: CLOUDINARY_API_SECRET,
-    secure: true,
-  });
-}
+// ==========================================
+// SUPABASE IMAGE UPLOAD
+// Image -> Supabase Storage
+// ==========================================
 
 async function uploadImage(file) {
   if (!file || file.size === 0) {
@@ -54,34 +30,44 @@ async function uploadImage(file) {
     throw new Error("Image size must not exceed 5 MB.");
   }
 
-  configureCloudinary();
+  const supabase = getSupabaseAdmin();
 
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  return new Promise((resolve, reject) => {
-    cloudinary.uploader
-      .upload_stream(
-        {
-          folder: "campusrent/listings",
-          resource_type: "image",
-        },
-        (error, result) => {
-          if (error) {
-            reject(error);
-            return;
-          }
+  const extension =
+    file.type === "image/jpeg"
+      ? "jpg"
+      : file.type.split("/")[1]?.replace(/[^a-zA-Z0-9]/g, "") || "img";
 
-          if (!result?.secure_url) {
-            reject(new Error("Cloudinary did not return an image URL."));
-            return;
-          }
+  const filePath = `${randomUUID()}.${extension}`;
 
-          resolve(result.secure_url);
-        }
-      )
-      .end(buffer);
-  });
+  const { data, error } = await supabase.storage
+    .from(BUCKET_NAME)
+    .upload(filePath, buffer, {
+      contentType: file.type,
+      cacheControl: "3600",
+      upsert: false,
+    });
+
+  if (error) {
+    console.error("Supabase Storage Error:", error);
+    throw new Error("Supabase image upload failed.");
+  }
+
+  const { data: publicData } = supabase.storage
+    .from(BUCKET_NAME)
+    .getPublicUrl(data.path);
+
+  if (!publicData?.publicUrl) {
+    throw new Error("Could not generate image URL.");
+  }
+
+  return publicData.publicUrl;
 }
+
+// ==========================================
+// ADMIN AUTHENTICATION
+// ==========================================
 
 function verifyAdmin(request) {
   const token =
@@ -109,7 +95,10 @@ function verifyAdmin(request) {
   }
 }
 
-// GET: Fetch listings
+// ==========================================
+// GET: FETCH ALL LISTINGS
+// ==========================================
+
 export async function GET() {
   try {
     await connectDB();
@@ -170,7 +159,12 @@ export async function GET() {
   }
 }
 
-// POST: Create listing and upload image
+// ==========================================
+// POST: CREATE LISTING
+// Image -> Supabase Storage
+// Details -> MongoDB
+// ==========================================
+
 export async function POST(request) {
   try {
     const formData = await request.formData();
@@ -249,7 +243,7 @@ export async function POST(request) {
     // Connect MongoDB
     await connectDB();
 
-    // Upload image
+    // Upload new image to Supabase
     let photoUrl = "";
 
     if (
@@ -265,7 +259,7 @@ export async function POST(request) {
       (typeof sellerName === "string" && sellerName.trim()) ||
       "Campus Student";
 
-    // Save listing
+    // Save listing details in MongoDB
     const listing = await Listing.create({
       name: name.trim(),
 
@@ -333,23 +327,31 @@ export async function POST(request) {
       },
       { status: 201 }
     );
-
   } catch (error) {
-    // IMPORTANT: Check Vercel Runtime Logs for this error.
     console.error("Listing creation error:", error);
+
+    const isClientError =
+      error.message === "Please upload a valid image file." ||
+      error.message === "Image size must not exceed 5 MB." ||
+      error.message === "Product name is required." ||
+      error.message === "Please enter a valid product price." ||
+      error.message === "Quantity must be at least 1.";
 
     return NextResponse.json(
       {
-        message: "Could not add product to database.",
-        error: error.message || "Unknown server error",
-        errorName: error.name || "Error",
+        message: isClientError
+          ? error.message
+          : "Could not add product to database.",
       },
-      { status: 500 }
+      { status: isClientError ? 400 : 500 }
     );
   }
 }
 
-// PATCH: Update listing (admin only)
+// ==========================================
+// PATCH: UPDATE LISTING (ADMIN ONLY)
+// ==========================================
+
 export async function PATCH(request) {
   if (!verifyAdmin(request)) {
     return NextResponse.json(
@@ -433,7 +435,6 @@ export async function PATCH(request) {
       message: "Listing updated successfully.",
       listing: updated,
     });
-
   } catch (error) {
     console.error("Error updating listing:", error);
 
@@ -444,7 +445,10 @@ export async function PATCH(request) {
   }
 }
 
-// DELETE: Remove product (admin only)
+// ==========================================
+// DELETE: REMOVE LISTING (ADMIN ONLY)
+// ==========================================
+
 export async function DELETE(request) {
   if (!verifyAdmin(request)) {
     return NextResponse.json(
@@ -478,7 +482,6 @@ export async function DELETE(request) {
     return NextResponse.json({
       message: "Product removed from database listings.",
     });
-
   } catch (error) {
     console.error("Error deleting listing:", error);
 
