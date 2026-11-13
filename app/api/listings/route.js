@@ -12,10 +12,6 @@ export const runtime = "nodejs";
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 const BUCKET_NAME = "listings";
 
-// ==========================================
-// SUPABASE IMAGE UPLOAD
-// Image -> Supabase Storage
-// ==========================================
 
 async function uploadImage(file) {
   if (!file || file.size === 0) {
@@ -65,9 +61,6 @@ async function uploadImage(file) {
   return publicData.publicUrl;
 }
 
-// ==========================================
-// ADMIN AUTHENTICATION
-// ==========================================
 
 function verifyAdmin(request) {
   const token =
@@ -95,9 +88,6 @@ function verifyAdmin(request) {
   }
 }
 
-// ==========================================
-// GET: FETCH ALL LISTINGS
-// ==========================================
 
 export async function GET() {
   try {
@@ -159,11 +149,7 @@ export async function GET() {
   }
 }
 
-// ==========================================
-// POST: CREATE LISTING
-// Image -> Supabase Storage
-// Details -> MongoDB
-// ==========================================
+
 
 export async function POST(request) {
   try {
@@ -348,9 +334,7 @@ export async function POST(request) {
   }
 }
 
-// ==========================================
-// PATCH: UPDATE LISTING (ADMIN ONLY)
-// ==========================================
+
 
 export async function PATCH(request) {
   if (!verifyAdmin(request)) {
@@ -445,9 +429,7 @@ export async function PATCH(request) {
   }
 }
 
-// ==========================================
-// DELETE: REMOVE LISTING (ADMIN ONLY)
-// ==========================================
+
 
 export async function DELETE(request) {
   if (!verifyAdmin(request)) {
